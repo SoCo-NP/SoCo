@@ -1,6 +1,7 @@
 package ide.client;
 
 import ide.net.CollabClient;
+import ide.net.CollabCallbacks;
 import ide.ui.EditorTab;
 import ide.ui.LineNumberView;
 
@@ -572,7 +573,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     }
     private void log(String msg) { console.append(msg + "\n"); console.setCaretPosition(console.getDocument().getLength()); }
     private void showError(String msg) { JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE); log("ERROR: " + msg); }
-    private BooleanSupplier isKeystrokeMode = () -> keystrokeMode;
+//    private BooleanSupplier isKeystrokeMode = () -> keystrokeMode;
     private Color colorForNick(String nick) {
         return userColors.computeIfAbsent(nick, n -> {
             Color[] p = { new Color(66,133,244), new Color(52,168,83), new Color(234,67,53), new Color(251,188,5),
