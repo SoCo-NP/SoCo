@@ -67,7 +67,6 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
         editorTabs.addChangeListener(e -> getActiveEditor().ifPresent(this::sendSnapshotNow));
 
-        SwingUtilities.invokeLater(this::chooseAndOpenProjectFolder);
     }
 
     private JComponent createEditorPanel() {
