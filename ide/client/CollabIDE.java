@@ -30,6 +30,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private final CollabClient collab = new CollabClient(this);
     private volatile boolean keystrokeMode = false;
     private final Map<String, Color> userColors = new HashMap<>();
+    private final Map<String, String> userRoles = new HashMap<>();
     private final Set<String> lockedFiles = new HashSet<>();
 
     public CollabIDE() {
@@ -152,7 +153,11 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         JMenuItem compile = new JMenuItem("Compile Active Java");
         compile.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0));
         compile.addActionListener(e -> actionCompileActiveJava());
+        JMenuItem run = new JMenuItem("Run Active Java");
+        run.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F10, 0));
+        run.addActionListener(e -> actionRunActiveJava());
         build.add(compile);
+        build.add(run);
         bar.add(build);
 
         return bar;
@@ -163,8 +168,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         JButton btnOpen = new JButton("Open Folder"); btnOpen.addActionListener(e -> chooseAndOpenProjectFolder());
         JButton btnSave = new JButton("Save"); btnSave.addActionListener(e -> actionSaveActive());
         JButton btnCompile = new JButton("Compile"); btnCompile.addActionListener(e -> actionCompileActiveJava());
+        JButton btnRun = new JButton("Run"); btnRun.addActionListener(e -> actionRunActiveJava());
         JButton btnConnect = new JButton("Connect"); btnConnect.addActionListener(e -> promptConnect());
-        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.addSeparator(); tb.add(btnConnect);
+        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.add(btnRun); tb.addSeparator(); tb.add(btnConnect);
         return tb;
     }
 
@@ -470,15 +476,18 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         JTextField host = new JTextField("127.0.0.1");
         JTextField port = new JTextField("6000");
         JTextField nick = new JTextField("user" + (int)(Math.random()*100));
+        JComboBox<String> role = new JComboBox<>(new String[]{"Student", "Professor"});
         p.add(new JLabel("Host:")); p.add(host);
         p.add(new JLabel("Port:")); p.add(port);
         p.add(new JLabel("Nickname:")); p.add(nick);
+        p.add(new JLabel("Role:")); p.add(role);
         int r = JOptionPane.showConfirmDialog(this, p, "Connect to Server", JOptionPane.OK_CANCEL_OPTION);
         if (r == JOptionPane.OK_OPTION) {
             try {
-                collab.connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nick.getText().trim());
+                String selectedRole = (String) role.getSelectedItem();
+                collab.connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nick.getText().trim(), selectedRole);
                 statusLabel.setText("Connected");
-                log("Connected to " + host.getText() + ":" + port.getText());
+                log("Connected to " + host.getText() + ":" + port.getText() + " as " + selectedRole);
                 getActiveEditor().ifPresent(this::sendSnapshotNow);
             } catch (Exception ex) { showError("연결 실패: " + ex.getMessage()); }
         }
@@ -524,6 +533,11 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         tab.updateRemoteCursor(nick, dot, mark, colorForNick(nick));
     }
 
+    @Override public void onRoleInfo(String nick, String role) {
+        userRoles.put(nick, role);
+        log("[NET] " + nick + " is a " + role);
+    }
+
     @Override public void onCompileGranted(String fpath, String byNick) {
         if (Objects.equals(byNick, collab.getNickname())) {
             log("[BUILD] Granted. Compiling: " + fpath);
@@ -542,10 +556,23 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
     private void runJavac(String fpath) {
         File file = new File(fpath);
-        if (!file.exists()) { log("[BUILD] File not found: " + fpath); collab.releaseCompile(fpath); return; }
+        if (!file.exists()) {
+            log("[BUILD] File not found: " + fpath);
+            collab.releaseCompile(fpath);
+            return;
+        }
+        if (projectRoot == null) {
+            log("[BUILD] Project root not set.");
+            collab.releaseCompile(fpath);
+            return;
+        }
+
         collab.sendCompileStart(fpath);
-        ProcessBuilder pb = new ProcessBuilder("javac", file.getName());
-        pb.directory(file.getParentFile());
+        // The file path should be relative to the project root for javac
+        String relativePath = projectRoot.toURI().relativize(file.toURI()).getPath();
+
+        ProcessBuilder pb = new ProcessBuilder("javac", "-d", "out", "-cp", "out", relativePath);
+        pb.directory(projectRoot); // Run from the project root
         pb.redirectErrorStream(true);
         try {
             Process p = pb.start();
@@ -562,6 +589,62 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         }
     }
 
+    private void actionRunActiveJava() {
+        Optional<EditorTab> opt = getActiveEditor();
+        if (opt.isEmpty()) {
+            showError("열린 탭이 없습니다.");
+            return;
+        }
+        EditorTab tab = opt.get();
+        File f = tab.getFile();
+        if (f == null) {
+            showError("먼저 파일을 저장하세요(untitled는 실행 불가).");
+            return;
+        }
+        if (!f.getName().endsWith(".java")) {
+            showError("현재 탭은 .java 파일이 아닙니다.");
+            return;
+        }
+        if (projectRoot == null) {
+            showError("프로젝트 폴더가 열려있지 않습니다. 'File > Open Folder'로 프로젝트를 먼저 여세요.");
+            return;
+        }
+
+        // Ensure the file is compiled and up-to-date.
+        // For simplicity, we'll just assume it's compiled.
+        // A better implementation would check timestamps or trigger a compile.
+
+        String relativePath = projectRoot.toURI().relativize(f.toURI()).getPath();
+        if (relativePath.startsWith("out/") || relativePath.startsWith("out\\")) {
+            showError("out 폴더 내의 파일은 직접 실행할 수 없습니다.");
+            return;
+        }
+        String className = relativePath.replaceFirst("\\.java$", "").replace(File.separatorChar, '.');
+
+        log("[RUN] Running: " + className);
+        new Thread(() -> runJavaProcess(className), "run-java-thread").start();
+    }
+
+    private void runJavaProcess(String className) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("java", "-cp", "out", className);
+            pb.directory(projectRoot);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    log("[RUN] " + line);
+                }
+            }
+            int exitCode = p.waitFor();
+            log("[RUN] Process finished with exit code " + exitCode);
+        } catch (IOException | InterruptedException e) {
+            showError("실행 오류: " + e.getMessage());
+            log("[RUN] ERROR: " + e.getMessage());
+        }
+    }
+
     // ===== helpers =====
     private EditorTab findTabByPath(String path) {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
@@ -574,6 +657,14 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private void showError(String msg) { JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE); log("ERROR: " + msg); }
 //    private BooleanSupplier isKeystrokeMode = () -> keystrokeMode;
     private Color colorForNick(String nick) {
+        String role = userRoles.get(nick);
+        if ("Professor".equals(role)) {
+            return new Color(255, 105, 180, 110); // Pink
+        }
+        if ("Student".equals(role)) {
+            return new Color(0, 255, 0, 110); // Green
+        }
+        // Fallback for unknown roles or before role info arrives
         return userColors.computeIfAbsent(nick, n -> {
             Color[] p = { new Color(66,133,244), new Color(52,168,83), new Color(234,67,53), new Color(251,188,5),
                     new Color(171,71,188), new Color(0,172,193), new Color(255,112,67), new Color(124,179,66) };

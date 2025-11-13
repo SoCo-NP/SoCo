@@ -1,6 +1,7 @@
 package ide.server;
 
 import java.io.*;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +17,7 @@ public class CollabServer {
 
     public void start() throws IOException {
         System.out.println("[SERVER] Starting on port " + port);
-        try (ServerSocket ss = new ServerSocket(port)) {
+        try (ServerSocket ss = new ServerSocket(port, 50, InetAddress.getByName("0.0.0.0"))) {
             while (true) {
                 Socket s = ss.accept();
                 Client c = new Client(s);
@@ -37,6 +38,7 @@ public class CollabServer {
         private BufferedReader in;
         private BufferedWriter out;
         private String nick = "?";
+        private String role = "Student";
 
         Client(Socket socket) { this.socket = socket; }
 
@@ -53,9 +55,27 @@ public class CollabServer {
                 String line;
                 while ((line = in.readLine()) != null) {
                     if (line.startsWith("JOIN|")) {
-                        nick = line.substring(5);
-                        send("INFO|Welcome " + nick);
-                        System.out.println("[SERVER] JOIN " + nick + " from " + socket.getRemoteSocketAddress());
+                        String[] parts = line.split("\\|", 3);
+                        if (parts.length >= 2) {
+                            nick = parts[1];
+                            if (parts.length == 3) {
+                                role = parts[2];
+                            }
+                            send("INFO|Welcome " + nick);
+                            System.out.println("[SERVER] Client connected: " + nick + " (" + role + ") from " + socket.getRemoteSocketAddress());
+
+                            // Announce the new user's role to everyone
+                            broadcast("ROLE_INFO|" + nick + "|" + role, null);
+
+                            // Send existing user roles to the new user
+                            synchronized (clients) {
+                                for (Client c : clients) {
+                                    if (c != this) {
+                                        send("ROLE_INFO|" + c.nick + "|" + c.role);
+                                    }
+                                }
+                            }
+                        }
                     } else if (line.startsWith("EDIT|")
                             || line.startsWith("CURSOR|")
                             || line.startsWith("COMPILE_START|")
@@ -103,7 +123,7 @@ public class CollabServer {
                 for (String f : toRelease) broadcast("COMPILE_RELEASE|" + f + "|" + nick, this);
 
                 clients.remove(this);
-                System.out.println("[SERVER] Bye " + nick);
+                System.out.println("[SERVER] Client disconnected: " + nick + " from " + socket.getRemoteSocketAddress());
                 try { socket.close(); } catch (IOException ignored2) {}
             }
         }

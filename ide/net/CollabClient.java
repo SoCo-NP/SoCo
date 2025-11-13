@@ -18,14 +18,14 @@ public class CollabClient {
     public boolean isConnected() { return connected; }
     public String getNickname() { return nickname; }
 
-    public void connect(String host, int port, String nick) throws IOException {
+    public void connect(String host, int port, String nick, String role) throws IOException {
         disconnect();
         socket = new Socket(host, port);
         socket.setTcpNoDelay(true);
         in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
         out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
         nickname = nick;
-        sendLine("JOIN|" + nick);
+        sendLine("JOIN|" + nick + "|" + role);
         connected = true;
         readerThread = new Thread(this::readLoop, "collab-reader");
         readerThread.setDaemon(true);
@@ -57,6 +57,11 @@ public class CollabClient {
                     String[] p = msg.split("\\|", 5);
                     if (p.length == 5) {
                         ui.applyRemoteCursor(p[1], p[2], safe(p[3]), safe(p[4]));
+                    }
+                } else if (msg.startsWith("ROLE_INFO|")) {
+                    String[] p = msg.split("\\|", 3);
+                    if (p.length == 3) {
+                        ui.onRoleInfo(p[1], p[2]);
                     }
                 } else if (msg.startsWith("COMPILE_GRANTED|")) {
                     String[] p = msg.split("\\|", 3); if (p.length == 3) ui.onCompileGranted(p[1], p[2]);
