@@ -127,8 +127,15 @@ public class EditorTab extends JTextArea {
         suppressBroadcast = true;
         try {
             int caret = getCaretPosition();
+            Point viewPos = null;
+            if (getParent() instanceof JViewport) {
+                viewPos = ((JViewport) getParent()).getViewPosition();
+            }
             setText(text);
             try { setCaretPosition(Math.min(caret, getDocument().getLength())); } catch (Exception ignored) {}
+            if (viewPos != null && getParent() instanceof JViewport) {
+                ((JViewport) getParent()).setViewPosition(viewPos);
+            }
             markDirty(true);
         } finally { suppressBroadcast = false; }
     }

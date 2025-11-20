@@ -32,6 +32,12 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private final Map<String, Color> userColors = new HashMap<>();
     private final Map<String, String> userRoles = new HashMap<>();
     private final Set<String> lockedFiles = new HashSet<>();
+    // Optimization: Fast lookup for tabs
+    private final Map<String, EditorTab> tabMap = new HashMap<>();
+
+    // Optimization: Cache role colors
+    private static final Color COLOR_PROFESSOR = new Color(255, 105, 180, 110);
+    private static final Color COLOR_STUDENT = new Color(0, 255, 0, 110);
 
     public CollabIDE() {
         super("Mini IDE - IntelliJ style");
@@ -285,6 +291,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             editorTabs.addTab(file.getName(), sp);
             int idx = editorTabs.getTabCount() - 1; editorTabs.setSelectedIndex(idx);
             editorTabs.setToolTipTextAt(idx, file.getAbsolutePath());
+            tabMap.put(tab.getVirtualPath(), tab); // Add to map
             onTabUpdated(tab);
         } catch (IOException ex) { showError("파일을 열 수 없습니다: " + ex.getMessage()); }
     }
@@ -297,6 +304,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         sp.setRowHeaderView(new LineNumberView(tab));
         editorTabs.addTab("Untitled", sp);
         editorTabs.setSelectedIndex(editorTabs.getTabCount() - 1);
+        tabMap.put(tab.getVirtualPath(), tab); // Add to map
         onTabUpdated(tab);
     }
 
@@ -386,7 +394,10 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             EditorTab t = (EditorTab) ((JScrollPane) editorTabs.getComponentAt(i)).getViewport().getView();
             if (t.getFile() != null) {
                 String p = t.getFile().getAbsolutePath();
-                if (p.equals(basePath) || p.startsWith(basePath + File.separator)) editorTabs.removeTabAt(i);
+                if (p.equals(basePath) || p.startsWith(basePath + File.separator)) {
+                    tabMap.remove(t.getVirtualPath());
+                    editorTabs.removeTabAt(i);
+                }
             }
         }
     }
@@ -394,7 +405,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
             EditorTab t = (EditorTab) ((JScrollPane) editorTabs.getComponentAt(i)).getViewport().getView();
             if (t.getFile() != null && t.getFile().getAbsolutePath().equals(oldPath)) {
+                tabMap.remove(oldPath);
                 t.setFile(new File(newPath));
+                tabMap.put(newPath, t);
                 setTabTitleFor(t);
             }
         }
@@ -403,25 +416,40 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     // ===== Save / Close =====
     private void actionSaveActive() { getActiveEditor().ifPresent(tab -> {
         if (tab.getFile() == null) { actionSaveAsActive(); }
-        else if (tab.saveTo(tab.getFile())) { setTabTitleFor(tab); log("Saved: " + tab.getFile().getAbsolutePath()); reloadFileTree(); }
+        else {
+            if (tab.saveTo(tab.getFile())) {
+                // Path shouldn't change here but good practice to re-put if needed, though for simple save it's same
+                setTabTitleFor(tab); log("Saved: " + tab.getFile().getAbsolutePath()); reloadFileTree();
+            }
+        }
     });}
     private void actionSaveAsActive() { getActiveEditor().ifPresent(tab -> {
         JFileChooser chooser = new JFileChooser(projectRoot != null ? projectRoot : new File("."));
         int res = chooser.showSaveDialog(this);
         if (res == JFileChooser.APPROVE_OPTION) {
             File target = chooser.getSelectedFile();
-            if (tab.saveTo(target)) { setTabTitleFor(tab); log("Saved As: " + target.getAbsolutePath()); reloadFileTree(); }
+            String oldPath = tab.getVirtualPath();
+            if (tab.saveTo(target)) {
+                tabMap.remove(oldPath);
+                tabMap.put(tab.getVirtualPath(), tab);
+                setTabTitleFor(tab); log("Saved As: " + target.getAbsolutePath()); reloadFileTree();
+            }
         }
     });}
     private void actionCloseActiveTab() {
         int idx = editorTabs.getSelectedIndex(); if (idx < 0) return;
         EditorTab tab = (EditorTab) ((JScrollPane) editorTabs.getComponentAt(idx)).getViewport().getView();
-        if (confirmCloseTab(tab)) editorTabs.removeTabAt(idx);
+        if (confirmCloseTab(tab)) {
+            tabMap.remove(tab.getVirtualPath());
+            editorTabs.removeTabAt(idx);
+        }
     }
     private boolean confirmCloseAllTabs() {
         for (int i = editorTabs.getTabCount()-1; i>=0; i--) {
             EditorTab tab = (EditorTab) ((JScrollPane) editorTabs.getComponentAt(i)).getViewport().getView();
-            if (!confirmCloseTab(tab)) return false; editorTabs.removeTabAt(i);
+            if (!confirmCloseTab(tab)) return false;
+            tabMap.remove(tab.getVirtualPath());
+            editorTabs.removeTabAt(i);
         }
         return true;
     }
@@ -436,7 +464,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                     int res = chooser.showSaveDialog(this);
                     if (res != JFileChooser.APPROVE_OPTION) return false;
                     if (!tab.saveTo(chooser.getSelectedFile())) return false; setTabTitleFor(tab); reloadFileTree();
-                } else { if (!tab.saveTo(tab.getFile())) return false; }
+                } else {
+                    if (!tab.saveTo(tab.getFile())) return false;
+                }
             }
         }
         return true;
@@ -509,50 +539,59 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
     // ===== CollabCallbacks (from network) =====
     @Override public void applyRemoteEdit(String path, String text) {
-        EditorTab tab = findTabByPath(path);
-        if (tab == null) {
-            File f = (path.startsWith("untitled:")) ? null : new File(path);
-            String vpath = (f == null) ? path : null;
-            tab = new EditorTab(f, text, vpath, collab, this::isKeystrokeMode, this::onTabUpdated);
-            JScrollPane sp = new JScrollPane(tab);
-            sp.setRowHeaderView(new LineNumberView(tab));
-            editorTabs.addTab(tab.getDisplayName(), sp);
-            int idx = editorTabs.getTabCount() - 1; editorTabs.setSelectedIndex(idx);
-            editorTabs.setToolTipTextAt(idx, f != null ? f.getAbsolutePath() : path);
-            onTabUpdated(tab);
-            log("[REMOTE] Opened " + path);
-        } else {
-            tab.applyRemoteText(text);
-            log("[REMOTE] Updated " + path);
-        }
+        SwingUtilities.invokeLater(() -> {
+            EditorTab tab = findTabByPath(path);
+            if (tab == null) {
+                File f = (path.startsWith("untitled:")) ? null : new File(path);
+                String vpath = (f == null) ? path : null;
+                tab = new EditorTab(f, text, vpath, collab, this::isKeystrokeMode, this::onTabUpdated);
+                JScrollPane sp = new JScrollPane(tab);
+                sp.setRowHeaderView(new LineNumberView(tab));
+                editorTabs.addTab(tab.getDisplayName(), sp);
+                int idx = editorTabs.getTabCount() - 1; editorTabs.setSelectedIndex(idx);
+                editorTabs.setToolTipTextAt(idx, f != null ? f.getAbsolutePath() : path);
+                tabMap.put(tab.getVirtualPath(), tab);
+                onTabUpdated(tab);
+                log("[REMOTE] Opened " + path);
+            } else {
+                tab.applyRemoteText(text);
+                log("[REMOTE] Updated " + path);
+            }
+        });
     }
 
     @Override public void applyRemoteCursor(String path, String nick, int dot, int mark) {
-        EditorTab tab = findTabByPath(path);
-        if (tab == null) return;
-        tab.updateRemoteCursor(nick, dot, mark, colorForNick(nick));
+        SwingUtilities.invokeLater(() -> {
+            EditorTab tab = findTabByPath(path);
+            if (tab == null) return;
+            tab.updateRemoteCursor(nick, dot, mark, colorForNick(nick));
+        });
     }
 
     @Override public void onRoleInfo(String nick, String role) {
-        userRoles.put(nick, role);
-        log("[NET] " + nick + " is a " + role);
+        SwingUtilities.invokeLater(() -> {
+            userRoles.put(nick, role);
+            log("[NET] " + nick + " is a " + role);
+        });
     }
 
     @Override public void onCompileGranted(String fpath, String byNick) {
-        if (Objects.equals(byNick, collab.getNickname())) {
-            log("[BUILD] Granted. Compiling: " + fpath);
-            lockedFiles.add(fpath);
-            new Thread(() -> runJavac(fpath), "compile-thread").start();
-        } else {
-            lockedFiles.add(fpath);
-            log("[BUILD] " + byNick + " is compiling: " + fpath);
-        }
+        SwingUtilities.invokeLater(() -> {
+            if (Objects.equals(byNick, collab.getNickname())) {
+                log("[BUILD] Granted. Compiling: " + fpath);
+                lockedFiles.add(fpath);
+                new Thread(() -> runJavac(fpath), "compile-thread").start();
+            } else {
+                lockedFiles.add(fpath);
+                log("[BUILD] " + byNick + " is compiling: " + fpath);
+            }
+        });
     }
-    @Override public void onCompileDenied(String fpath, String holder) { log("[BUILD] Denied. Current holder: " + holder + " for " + fpath); }
-    @Override public void onCompileStart(String fpath, String nick) { log("[BUILD] START by " + nick + " → " + fpath); lockedFiles.add(fpath); }
-    @Override public void onCompileOut(String fpath, String nick, String line) { log("[" + new File(fpath).getName() + "] " + nick + ": " + line); }
-    @Override public void onCompileEnd(String fpath, String nick, int exit) { log("[BUILD] END by " + nick + " (exit=" + exit + ") → " + fpath); }
-    @Override public void onCompileReleased(String fpath, String nick) { lockedFiles.remove(fpath); log("[BUILD] RELEASED by " + nick + " → " + fpath); }
+    @Override public void onCompileDenied(String fpath, String holder) { SwingUtilities.invokeLater(() -> log("[BUILD] Denied. Current holder: " + holder + " for " + fpath)); }
+    @Override public void onCompileStart(String fpath, String nick) { SwingUtilities.invokeLater(() -> { log("[BUILD] START by " + nick + " → " + fpath); lockedFiles.add(fpath); }); }
+    @Override public void onCompileOut(String fpath, String nick, String line) { SwingUtilities.invokeLater(() -> log("[" + new File(fpath).getName() + "] " + nick + ": " + line)); }
+    @Override public void onCompileEnd(String fpath, String nick, int exit) { SwingUtilities.invokeLater(() -> log("[BUILD] END by " + nick + " (exit=" + exit + ") → " + fpath)); }
+    @Override public void onCompileReleased(String fpath, String nick) { SwingUtilities.invokeLater(() -> { lockedFiles.remove(fpath); log("[BUILD] RELEASED by " + nick + " → " + fpath); }); }
 
     private void runJavac(String fpath) {
         File file = new File(fpath);
@@ -647,11 +686,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
     // ===== helpers =====
     private EditorTab findTabByPath(String path) {
-        for (int i = 0; i < editorTabs.getTabCount(); i++) {
-            EditorTab t = (EditorTab) ((JScrollPane) editorTabs.getComponentAt(i)).getViewport().getView();
-            if (Objects.equals(t.getVirtualPath(), path)) return t;
-        }
-        return null;
+        return tabMap.get(path);
     }
     private void log(String msg) { console.append(msg + "\n"); console.setCaretPosition(console.getDocument().getLength()); }
     private void showError(String msg) { JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE); log("ERROR: " + msg); }
@@ -659,10 +694,10 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private Color colorForNick(String nick) {
         String role = userRoles.get(nick);
         if ("Professor".equals(role)) {
-            return new Color(255, 105, 180, 110); // Pink
+            return COLOR_PROFESSOR;
         }
         if ("Student".equals(role)) {
-            return new Color(0, 255, 0, 110); // Green
+            return COLOR_STUDENT;
         }
         // Fallback for unknown roles or before role info arrives
         return userColors.computeIfAbsent(nick, n -> {
