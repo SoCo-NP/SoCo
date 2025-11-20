@@ -41,12 +41,51 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private boolean followMeActive = false;
     private final javax.swing.Timer viewportDebounce;
 
+    // Laser Pointer Mode
+    private JToggleButton btnLaser;
+    private boolean laserActive = false;
+    private final javax.swing.Timer laserDebounce;
+
     // Optimization: Cache role colors
     private static final Color COLOR_PROFESSOR = new Color(255, 105, 180, 110);
     private static final Color COLOR_STUDENT = new Color(0, 255, 0, 110);
+    
+    // Attendance Check
+    private JToggleButton btnAttendance;
+    private AttendanceDialog attendanceDialog;
+    private static final String[] EXPECTED_STUDENTS = {"student1", "student2", "student3", "student4", "student5"};
 
     public CollabIDE() {
         super("Mini IDE - IntelliJ style");
+        
+        // Global Dark Theme Settings
+        try {
+            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+        } catch (Exception ignored) {}
+        UIManager.put("Panel.background", Color.DARK_GRAY);
+        UIManager.put("Panel.foreground", Color.WHITE);
+        UIManager.put("Label.foreground", Color.WHITE);
+        UIManager.put("Button.background", Color.DARK_GRAY);
+        UIManager.put("Button.foreground", Color.WHITE);
+        UIManager.put("TextField.background", Color.DARK_GRAY);
+        UIManager.put("TextField.foreground", Color.WHITE);
+        UIManager.put("TextField.caretForeground", Color.WHITE);
+        UIManager.put("TextArea.background", Color.DARK_GRAY);
+        UIManager.put("TextArea.foreground", Color.WHITE);
+        UIManager.put("ScrollPane.background", Color.DARK_GRAY);
+        UIManager.put("Viewport.background", Color.DARK_GRAY);
+        UIManager.put("Tree.background", Color.DARK_GRAY);
+        UIManager.put("Tree.foreground", Color.WHITE);
+        UIManager.put("Tree.textForeground", Color.WHITE);
+        UIManager.put("List.background", Color.DARK_GRAY);
+        UIManager.put("List.foreground", Color.WHITE);
+        UIManager.put("MenuBar.background", Color.DARK_GRAY);
+        UIManager.put("MenuBar.foreground", Color.WHITE);
+        UIManager.put("Menu.background", Color.DARK_GRAY);
+        UIManager.put("Menu.foreground", Color.WHITE);
+        UIManager.put("MenuItem.background", Color.DARK_GRAY);
+        UIManager.put("MenuItem.foreground", Color.WHITE);
+        
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setMinimumSize(new Dimension(1180, 780));
         setLocationRelativeTo(null);
@@ -56,9 +95,12 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
         JSplitPane h = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, createFileTreePanel(), createEditorPanel());
         h.setResizeWeight(0.22);
+        h.setBackground(Color.DARK_GRAY);
 
         JScrollPane consoleScroll = new JScrollPane(console);
         console.setEditable(false);
+        console.setBackground(new Color(40, 40, 40));
+        console.setForeground(new Color(200, 200, 200));
         console.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         consoleScroll.setPreferredSize(new Dimension(0, 180));
 
@@ -66,6 +108,8 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         v.setResizeWeight(0.8);
 
         statusPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
+        statusPanel.setBackground(Color.DARK_GRAY);
+        statusLabel.setForeground(Color.WHITE);
         statusPanel.add(statusLabel, BorderLayout.WEST);
 
         getContentPane().add(v, BorderLayout.CENTER);
@@ -88,6 +132,12 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             if (followMeActive && collab.isConnected()) sendViewportNow();
         });
         viewportDebounce.setRepeats(false);
+
+        laserDebounce = new javax.swing.Timer(50, e -> {
+            // This timer is used to throttle laser updates if needed, 
+            // but we might just send them directly in mouseMoved for smoothness.
+            // For now, we'll use direct sending in the listener with a small check.
+        });
     }
 
     private JComponent createEditorPanel() {
@@ -198,7 +248,24 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             if (followMeActive) sendViewportNow();
         });
 
-        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.add(btnRun); tb.addSeparator(); tb.add(btnConnect); tb.addSeparator(); tb.add(btnFollowMe);
+        btnLaser = new JToggleButton("Laser");
+        btnLaser.setVisible(false);
+        btnLaser.addActionListener(e -> {
+            laserActive = btnLaser.isSelected();
+            updateLaserState();
+        });
+
+        btnAttendance = new JToggleButton("Attendance");
+        btnAttendance.setVisible(false);
+        btnAttendance.addActionListener(e -> {
+            if (btnAttendance.isSelected()) {
+                showAttendanceDialog();
+            } else {
+                hideAttendanceDialog();
+            }
+        });
+
+        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.add(btnRun); tb.addSeparator(); tb.add(btnConnect); tb.addSeparator(); tb.add(btnFollowMe); tb.add(btnLaser); tb.add(btnAttendance);
         return tb;
     }
 
@@ -209,7 +276,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         fileTree.setModel(new DefaultTreeModel(new DefaultMutableTreeNode("No folder opened")));
         fileTree.setRootVisible(true);
         fileTree.setShowsRootHandles(true);
-        fileTree.setCellRenderer(new DefaultTreeCellRenderer(){
+        
+        // Dark theme for tree
+        DefaultTreeCellRenderer renderer = new DefaultTreeCellRenderer() {
             @Override public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean exp, boolean leaf, int row, boolean focus) {
                 super.getTreeCellRendererComponent(tree, value, sel, exp, leaf, row, focus);
                 Object user = ((DefaultMutableTreeNode)value).getUserObject();
@@ -219,7 +288,12 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                 }
                 return this;
             }
-        });
+        };
+        renderer.setBackgroundNonSelectionColor(Color.DARK_GRAY);
+        renderer.setTextNonSelectionColor(Color.WHITE);
+        renderer.setBackgroundSelectionColor(new Color(60, 60, 60));
+        renderer.setTextSelectionColor(Color.WHITE);
+        fileTree.setCellRenderer(renderer);
 
         // context menu
         JPopupMenu popup = new JPopupMenu();
@@ -315,6 +389,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             editorTabs.setToolTipTextAt(idx, file.getAbsolutePath());
             tabMap.put(tab.getVirtualPath(), tab); // Add to map
             setupViewportListener(tab);
+            setupLaserListener(tab);
             onTabUpdated(tab);
         } catch (IOException ex) { showError("파일을 열 수 없습니다: " + ex.getMessage()); }
     }
@@ -329,6 +404,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         editorTabs.setSelectedIndex(editorTabs.getTabCount() - 1);
         tabMap.put(tab.getVirtualPath(), tab); // Add to map
         setupViewportListener(tab);
+        setupLaserListener(tab);
         onTabUpdated(tab);
     }
 
@@ -577,6 +653,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                 editorTabs.setToolTipTextAt(idx, f != null ? f.getAbsolutePath() : path);
                 tabMap.put(tab.getVirtualPath(), tab);
                 setupViewportListener(tab);
+                setupLaserListener(tab);
                 onTabUpdated(tab);
                 log("[REMOTE] Opened " + path);
             } else {
@@ -628,13 +705,30 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         });
     }
 
+    @Override public void applyRemoteLaser(String path, int x, int y) {
+        SwingUtilities.invokeLater(() -> {
+            EditorTab tab = findTabByPath(path);
+            if (tab != null) {
+                tab.updateRemoteLaser(x, y);
+            }
+        });
+    }
+
     @Override public void onRoleInfo(String nick, String role) {
         SwingUtilities.invokeLater(() -> {
             userRoles.put(nick, role);
-            log("[NET] " + nick + " is a " + role);
+            refreshCursors();
+            if (role.equals("Professor") || role.equals("Student")) {
+                String msg = "[ROLE] " + nick + " = " + role;
+                log(msg);
+            }
+            
             if (Objects.equals(nick, collab.getNickname())) {
                 updateThemeForRole(role);
             }
+            
+            // Update attendance
+            updateAttendanceStatus();
         });
     }
 
@@ -779,22 +873,34 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             themeColor = new Color(255, 182, 193); // Light Pink
             titleSuffix = " [PROFESSOR]";
             btnFollowMe.setVisible(true); // Show button for Professor
+            btnLaser.setVisible(true);
+            btnAttendance.setVisible(true);
         } else if ("Student".equals(role)) {
             themeColor = new Color(144, 238, 144); // Light Green
             titleSuffix = " [STUDENT]";
             btnFollowMe.setVisible(false);
             followMeActive = false; // Force disable
+            btnLaser.setVisible(false);
+            laserActive = false;
+            btnAttendance.setVisible(false);
+            updateLaserState();
         } else {
-            themeColor = UIManager.getColor("Panel.background");
+            themeColor = Color.DARK_GRAY; // Default dark
             titleSuffix = "";
+            btnFollowMe.setVisible(false);
+            followMeActive = false;
+            btnLaser.setVisible(false);
+            laserActive = false;
+            updateLaserState();
         }
 
-        setTitle("Mini IDE - IntelliJ style" + titleSuffix);
-        statusPanel.setBackground(themeColor);
-        statusPanel.setOpaque(true);
+        setTitle("Mini IDE (Java) - " + (collab.getNickname() != null ? collab.getNickname() : "Guest") + titleSuffix);
         
-        // Add a colored border to the main content pane
-        ((JComponent) getContentPane()).setBorder(BorderFactory.createLineBorder(themeColor, 3));
+        // Only color the status bar and border, NOT the whole content pane background
+        statusPanel.setBackground(themeColor);
+        if (getRootPane() != null) {
+            getRootPane().setBorder(BorderFactory.createLineBorder(themeColor, 3));
+        }
         
         revalidate();
         repaint();
@@ -805,6 +911,37 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         vp.addChangeListener(e -> {
             if (followMeActive && collab.isConnected() && editorTabs.getSelectedComponent() == vp.getParent()) {
                 viewportDebounce.restart();
+            }
+        });
+    }
+
+    private void setupLaserListener(EditorTab tab) {
+        tab.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override public void mouseMoved(java.awt.event.MouseEvent e) {
+                if (laserActive && collab.isConnected()) {
+                    collab.sendLaser(tab.getVirtualPath(), e.getX(), e.getY());
+                }
+            }
+            @Override public void mouseDragged(java.awt.event.MouseEvent e) {
+                if (laserActive && collab.isConnected()) {
+                    collab.sendLaser(tab.getVirtualPath(), e.getX(), e.getY());
+                }
+            }
+        });
+    }
+
+    private void updateLaserState() {
+        // If laser is turned off, send a "hide" message (-1, -1)
+        if (!laserActive && collab.isConnected()) {
+            getActiveEditor().ifPresent(tab -> collab.sendLaser(tab.getVirtualPath(), -1, -1));
+        }
+        
+        // Change cursor for active editor
+        getActiveEditor().ifPresent(tab -> {
+            if (laserActive) {
+                tab.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            } else {
+                tab.setCursor(Cursor.getDefaultCursor());
             }
         });
     }
@@ -826,5 +963,101 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception ignored) {}
             new CollabIDE().setVisible(true);
         });
+    }
+    
+    // ===== Attendance Check Methods =====
+    private void showAttendanceDialog() {
+        if (attendanceDialog == null) {
+            attendanceDialog = new AttendanceDialog(this);
+        }
+        attendanceDialog.setVisible(true);
+        updateAttendanceStatus();
+    }
+    
+    private void hideAttendanceDialog() {
+        if (attendanceDialog != null) {
+            attendanceDialog.setVisible(false);
+        }
+    }
+    
+    private void updateAttendanceStatus() {
+        if (attendanceDialog != null && attendanceDialog.isVisible()) {
+            attendanceDialog.update();
+        }
+    }
+    
+    private void refreshCursors() {
+        getActiveEditor().ifPresent(tab -> {
+            // Update remote cursors for active tab
+            for (Map.Entry<String, String> entry : userRoles.entrySet()) {
+                String nick = entry.getKey();
+                String role = entry.getValue();
+                Color color = colorForNick(nick);
+                // This would need cursor position data, which we might not have
+                // For now, just leave this as a placeholder
+            }
+        });
+    }
+    
+    // ===== Attendance Dialog =====
+    private class AttendanceDialog extends JDialog {
+        private final Map<String, JLabel> studentLabels = new HashMap<>();
+        
+        public AttendanceDialog(JFrame parent) {
+            super(parent, "Attendance Check",  false);
+            setSize(300, 250);
+            setLocationRelativeTo(parent);
+            setDefaultCloseOperation(HIDE_ON_CLOSE);
+            
+            JPanel panel = new JPanel();
+            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+            panel.setBackground(Color.DARK_GRAY);
+            panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            
+            JLabel title = new JLabel("Student Attendance");
+            title.setForeground(Color.WHITE);
+            title.setFont(title.getFont().deriveFont(16f).deriveFont(java.awt.Font.BOLD));
+            title.setAlignmentX(Component.CENTER_ALIGNMENT);
+            panel.add(title);
+            panel.add(Box.createVerticalStrut(15));
+            
+            for (String student : EXPECTED_STUDENTS) {
+                JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT));
+                row.setBackground(Color.DARK_GRAY);
+                
+                JLabel indicator = new JLabel("●");
+                indicator.setFont(indicator.getFont().deriveFont(20f));
+                indicator.setForeground(Color.RED);
+                
+                JLabel nameLabel = new JLabel(student);
+                nameLabel.setForeground(Color.WHITE);
+                nameLabel.setFont(nameLabel.getFont().deriveFont(14f));
+                
+                row.add(indicator);
+                row.add(Box.createHorizontalStrut(10));
+                row.add(nameLabel);
+                
+                panel.add(row);
+                studentLabels.put(student, indicator);
+            }
+            
+            add(new JScrollPane(panel));
+            
+            addWindowListener(new WindowAdapter() {
+                @Override public void windowClosing(WindowEvent e) {
+                    btnAttendance.setSelected(false);
+                }
+            });
+        }
+        
+        public void update() {
+            for (String student : EXPECTED_STUDENTS) {
+                JLabel indicator = studentLabels.get(student);
+                if (indicator != null) {
+                    boolean isPresent = userRoles.containsKey(student);
+                    indicator.setForeground(isPresent ? Color.GREEN : Color.RED);
+                }
+            }
+        }
     }
 }

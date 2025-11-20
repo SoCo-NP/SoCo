@@ -17,8 +17,13 @@ public class LineNumberView extends JComponent implements DocumentListener, Care
         this.textArea = area;
         area.getDocument().addDocumentListener(this);
         area.addCaretListener(this);
+        area.addCaretListener(this);
         setFont(area.getFont());
-        setForeground(new Color(120,120,120));
+        
+        // Dark Mode Theme
+        setBackground(new Color(30, 30, 30)); // #1E1E1E
+        setForeground(new Color(133, 133, 133)); // #858585
+        
         setBorder(BorderFactory.createEmptyBorder(0,0,0,MARGIN));
     }
 

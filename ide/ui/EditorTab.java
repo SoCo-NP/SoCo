@@ -27,9 +27,11 @@ public class EditorTab extends JTextArea {
     private boolean dirty = false;
     private final UndoManager undoManager = new UndoManager();
     private int baseFontSize = 14;
+    private final java.util.Map<String, RemoteCursor> remoteCursors = new java.util.concurrent.ConcurrentHashMap<>();
+    private Point remoteLaserPoint = null;
 
     private final CollabClient collab;
-    private final BooleanSupplier keystrokeMode;
+    private final BooleanSupplier isKeystrokeMode;
     private final Consumer<EditorTab> onUpdate;
     private boolean suppressBroadcast = false;
     private final String virtualPath; // untitled:UUID or file path
@@ -48,7 +50,7 @@ public class EditorTab extends JTextArea {
         super(text);
         this.file = file;
         this.collab = collab;
-        this.keystrokeMode = keystrokeMode;
+        this.isKeystrokeMode = keystrokeMode;
         this.onUpdate = onUpdate;
         this.virtualPath = (file != null) ? file.getAbsolutePath()
                 : (providedVirtualPath != null ? providedVirtualPath : ("untitled:" + UUID.randomUUID()));
@@ -56,6 +58,13 @@ public class EditorTab extends JTextArea {
         setFont(new Font(Font.MONOSPACED, Font.PLAIN, baseFontSize));
         setTabSize(4); setLineWrap(false); setWrapStyleWord(false);
         setMargin(new Insets(8,8,8,8));
+
+        // Dark Mode Theme
+        setBackground(new Color(30, 30, 30)); // #1E1E1E
+        setForeground(new Color(212, 212, 212)); // #D4D4D4
+        setCaretColor(Color.WHITE);
+        setSelectionColor(new Color(38, 79, 120)); // #264F78
+        setSelectedTextColor(Color.WHITE);
 
         getDocument().addUndoableEditListener(e -> { undoManager.addEdit(e.getEdit()); markDirty(true); });
         getDocument().addDocumentListener(new DocumentListener() {
@@ -88,7 +97,7 @@ public class EditorTab extends JTextArea {
 
     private void scheduleBroadcast() {
         if (suppressBroadcast) return;
-        if (keystrokeMode.getAsBoolean()) {
+        if (isKeystrokeMode.getAsBoolean()) {
             if (collab.isConnected()) collab.sendSnapshot(getVirtualPath(), getText());
         } else {
             debounce.restart();
@@ -142,17 +151,64 @@ public class EditorTab extends JTextArea {
 
     public void updateRemoteCursor(String nick, int dot, int mark, Color color) {
         Highlighter hl = getHighlighter();
-        Object old = cursorTags.remove(nick);
-        if (old != null) hl.removeHighlight(old);
+        RemoteCursor old = remoteCursors.get(nick);
+        if (old != null && old.tag != null) hl.removeHighlight(old.tag);
+
         int len = getDocument().getLength();
         if (len == 0) return;
-        int start = Math.max(0, Math.min(dot, mark));
-        int end   = Math.max(0, Math.max(dot, mark));
-        if (start == end) { start = Math.min(start, Math.max(0, len - 1)); end = Math.min(start + 1, len); }
-        else { start = Math.min(start, len); end = Math.min(Math.max(start + 1, end), len); }
+        dot = Math.min(Math.max(0, dot), len);
+        mark = Math.min(Math.max(0, mark), len);
+
         try {
-            Object tag = hl.addHighlight(start, end, new DefaultHighlighter.DefaultHighlightPainter(color));
-            cursorTags.put(nick, tag);
+            Object tag = hl.addHighlight(Math.min(dot, mark), Math.max(dot, mark),
+                    new DefaultHighlighter.DefaultHighlightPainter(color));
+            remoteCursors.put(nick, new RemoteCursor(tag, dot, mark, color));
         } catch (BadLocationException ignored) {}
+        repaint();
+    }
+
+    @Override protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        // Draw remote cursors (vertical lines)
+        g.setColor(Color.BLACK);
+        for (RemoteCursor rc : remoteCursors.values()) {
+            try {
+                Rectangle r = modelToView(rc.dot);
+                if (r != null) {
+                    g.setColor(rc.color.darker());
+                    g.fillRect(r.x, r.y, 2, r.height);
+                    g.drawString(" ", r.x, r.y - 2); // simple label placeholder
+                }
+            } catch (BadLocationException ignored) {}
+        }
+    }
+
+    @Override public void paintChildren(Graphics g) {
+        super.paintChildren(g);
+        // Draw Laser
+        if (remoteLaserPoint != null) {
+            g.setColor(new Color(255, 0, 0, 180));
+            g.fillOval(remoteLaserPoint.x - 5, remoteLaserPoint.y - 5, 10, 10);
+            g.setColor(Color.WHITE);
+            g.drawOval(remoteLaserPoint.x - 5, remoteLaserPoint.y - 5, 10, 10);
+        }
+    }
+
+    public void updateRemoteLaser(int x, int y) {
+        if (x < 0 || y < 0) {
+            remoteLaserPoint = null;
+        } else {
+            remoteLaserPoint = new Point(x, y);
+        }
+        repaint();
+    }
+
+    private static class RemoteCursor {
+        Object tag;
+        int dot, mark;
+        Color color;
+        RemoteCursor(Object tag, int dot, int mark, Color color) {
+            this.tag = tag; this.dot = dot; this.mark = mark; this.color = color;
+        }
     }
 }

@@ -6,6 +6,7 @@ public interface CollabCallbacks {
     void applyRemoteCursor(String path, String nick, int dot, int mark);
     void onRoleInfo(String nick, String role);
     void applyRemoteViewport(String path, int line);
+    void applyRemoteLaser(String path, int x, int y);
 
     // compile
     void onCompileGranted(String fpath, String byNick);

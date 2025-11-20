@@ -63,6 +63,11 @@ public class CollabClient {
                         if (p.length == 3) {
                             ui.applyRemoteViewport(p[1], safe(p[2]));
                         }
+                    } else if (msg.startsWith("LASER|")) {
+                        String[] p = msg.split("\\|", 4);
+                        if (p.length == 4) {
+                            ui.applyRemoteLaser(p[1], safe(p[2]), safe(p[3]));
+                        }
                     } else if (msg.startsWith("ROLE_INFO|")) {
                     String[] p = msg.split("\\|", 3);
                     if (p.length == 3) {
@@ -109,6 +114,11 @@ public class CollabClient {
     public void sendViewport(String vpath, int line) {
         if (!connected) return;
         sendLine("VIEWPORT|" + vpath + "|" + line);
+    }
+
+    public void sendLaser(String vpath, int x, int y) {
+        if (!connected) return;
+        sendLine("LASER|" + vpath + "|" + x + "|" + y);
     }
 
     // compile
