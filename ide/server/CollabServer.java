@@ -83,7 +83,8 @@ public class CollabServer {
                             || line.startsWith("COMPILE_END|")
                             || line.startsWith("FILE_CREATE|")
                             || line.startsWith("FILE_DELETE|")
-                            || line.startsWith("FILE_RENAME|")) {
+                            || line.startsWith("FILE_RENAME|")
+                            || line.startsWith("VIEWPORT|")) {
                         broadcast(line, this);
                     } else if (line.startsWith("COMPILE_REQ|")) {
                         String[] p = line.split("\\|", 3);

@@ -5,6 +5,7 @@ public interface CollabCallbacks {
     void applyRemoteEdit(String path, String text);
     void applyRemoteCursor(String path, String nick, int dot, int mark);
     void onRoleInfo(String nick, String role);
+    void applyRemoteViewport(String path, int line);
 
     // compile
     void onCompileGranted(String fpath, String byNick);

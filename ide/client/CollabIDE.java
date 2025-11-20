@@ -25,6 +25,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private final JTabbedPane editorTabs = new JTabbedPane();
     private final JTextArea console = new JTextArea();
     private final JLabel statusLabel = new JLabel("Offline");
+    private final JPanel statusPanel = new JPanel(new BorderLayout());
 
     private File projectRoot;
     private final CollabClient collab = new CollabClient(this);
@@ -34,6 +35,11 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private final Set<String> lockedFiles = new HashSet<>();
     // Optimization: Fast lookup for tabs
     private final Map<String, EditorTab> tabMap = new HashMap<>();
+
+    // Follow Me Mode
+    private JToggleButton btnFollowMe;
+    private boolean followMeActive = false;
+    private final javax.swing.Timer viewportDebounce;
 
     // Optimization: Cache role colors
     private static final Color COLOR_PROFESSOR = new Color(255, 105, 180, 110);
@@ -59,12 +65,11 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         JSplitPane v = new JSplitPane(JSplitPane.VERTICAL_SPLIT, h, consoleScroll);
         v.setResizeWeight(0.8);
 
-        JPanel status = new JPanel(new BorderLayout());
-        status.setBorder(new EmptyBorder(4, 8, 4, 8));
-        status.add(statusLabel, BorderLayout.WEST);
+        statusPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
+        statusPanel.add(statusLabel, BorderLayout.WEST);
 
         getContentPane().add(v, BorderLayout.CENTER);
-        getContentPane().add(status, BorderLayout.SOUTH);
+        getContentPane().add(statusPanel, BorderLayout.SOUTH);
 
         addWindowListener(new WindowAdapter() {
             @Override public void windowClosing(WindowEvent e) {
@@ -72,8 +77,17 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             }
         });
 
-        editorTabs.addChangeListener(e -> getActiveEditor().ifPresent(this::sendSnapshotNow));
+        editorTabs.addChangeListener(e -> {
+            getActiveEditor().ifPresent(this::sendSnapshotNow);
+            if (followMeActive && collab.isConnected()) {
+                sendViewportNow();
+            }
+        });
 
+        viewportDebounce = new javax.swing.Timer(100, e -> {
+            if (followMeActive && collab.isConnected()) sendViewportNow();
+        });
+        viewportDebounce.setRepeats(false);
     }
 
     private JComponent createEditorPanel() {
@@ -176,7 +190,15 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         JButton btnCompile = new JButton("Compile"); btnCompile.addActionListener(e -> actionCompileActiveJava());
         JButton btnRun = new JButton("Run"); btnRun.addActionListener(e -> actionRunActiveJava());
         JButton btnConnect = new JButton("Connect"); btnConnect.addActionListener(e -> promptConnect());
-        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.add(btnRun); tb.addSeparator(); tb.add(btnConnect);
+        
+        btnFollowMe = new JToggleButton("Follow Me");
+        btnFollowMe.setVisible(false); // Hidden by default
+        btnFollowMe.addActionListener(e -> {
+            followMeActive = btnFollowMe.isSelected();
+            if (followMeActive) sendViewportNow();
+        });
+
+        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.add(btnRun); tb.addSeparator(); tb.add(btnConnect); tb.addSeparator(); tb.add(btnFollowMe);
         return tb;
     }
 
@@ -292,6 +314,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             int idx = editorTabs.getTabCount() - 1; editorTabs.setSelectedIndex(idx);
             editorTabs.setToolTipTextAt(idx, file.getAbsolutePath());
             tabMap.put(tab.getVirtualPath(), tab); // Add to map
+            setupViewportListener(tab);
             onTabUpdated(tab);
         } catch (IOException ex) { showError("파일을 열 수 없습니다: " + ex.getMessage()); }
     }
@@ -305,6 +328,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         editorTabs.addTab("Untitled", sp);
         editorTabs.setSelectedIndex(editorTabs.getTabCount() - 1);
         tabMap.put(tab.getVirtualPath(), tab); // Add to map
+        setupViewportListener(tab);
         onTabUpdated(tab);
     }
 
@@ -518,6 +542,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                 collab.connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nick.getText().trim(), selectedRole);
                 statusLabel.setText("Connected");
                 log("Connected to " + host.getText() + ":" + port.getText() + " as " + selectedRole);
+                updateThemeForRole(selectedRole); // Apply theme immediately
                 getActiveEditor().ifPresent(this::sendSnapshotNow);
             } catch (Exception ex) { showError("연결 실패: " + ex.getMessage()); }
         }
@@ -551,6 +576,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                 int idx = editorTabs.getTabCount() - 1; editorTabs.setSelectedIndex(idx);
                 editorTabs.setToolTipTextAt(idx, f != null ? f.getAbsolutePath() : path);
                 tabMap.put(tab.getVirtualPath(), tab);
+                setupViewportListener(tab);
                 onTabUpdated(tab);
                 log("[REMOTE] Opened " + path);
             } else {
@@ -568,10 +594,47 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         });
     }
 
+    @Override public void applyRemoteViewport(String path, int line) {
+        SwingUtilities.invokeLater(() -> {
+            // Only follow if I am a student (or simply not the one broadcasting)
+            // But here we assume only Professor broadcasts, so everyone else follows.
+            // If I am Professor, I shouldn't follow myself (loop), but the server echoes back?
+            // Server broadcast logic usually excludes sender. So it's safe.
+            // However, if there are multiple professors, they might fight.
+            // For now, just apply it.
+            
+            EditorTab tab = findTabByPath(path);
+            if (tab == null) {
+                // If file not open, try to open it (if it's a real file)
+                File f = new File(path);
+                if (f.exists() && f.isFile()) {
+                    openFileInEditor(f);
+                    tab = findTabByPath(path);
+                }
+            }
+            
+            if (tab != null) {
+                editorTabs.setSelectedComponent(tab.getParent().getParent()); // Select tab (JScrollPane -> Tab)
+                try {
+                    int offset = tab.getLineStartOffset(Math.max(0, line - 1));
+                    Rectangle rect = tab.modelToView(offset);
+                    if (rect != null) {
+                        // Center the view if possible, or just scroll to top
+                        JViewport vp = (JViewport) tab.getParent();
+                        vp.setViewPosition(new Point(0, rect.y));
+                    }
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+
     @Override public void onRoleInfo(String nick, String role) {
         SwingUtilities.invokeLater(() -> {
             userRoles.put(nick, role);
             log("[NET] " + nick + " is a " + role);
+            if (Objects.equals(nick, collab.getNickname())) {
+                updateThemeForRole(role);
+            }
         });
     }
 
@@ -705,6 +768,55 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                     new Color(171,71,188), new Color(0,172,193), new Color(255,112,67), new Color(124,179,66) };
             Color c = p[Math.abs(n.hashCode()) % p.length];
             return new Color(c.getRed(), c.getGreen(), c.getBlue(), 110);
+        });
+    }
+
+    private void updateThemeForRole(String role) {
+        Color themeColor;
+        String titleSuffix;
+
+        if ("Professor".equals(role)) {
+            themeColor = new Color(255, 182, 193); // Light Pink
+            titleSuffix = " [PROFESSOR]";
+            btnFollowMe.setVisible(true); // Show button for Professor
+        } else if ("Student".equals(role)) {
+            themeColor = new Color(144, 238, 144); // Light Green
+            titleSuffix = " [STUDENT]";
+            btnFollowMe.setVisible(false);
+            followMeActive = false; // Force disable
+        } else {
+            themeColor = UIManager.getColor("Panel.background");
+            titleSuffix = "";
+        }
+
+        setTitle("Mini IDE - IntelliJ style" + titleSuffix);
+        statusPanel.setBackground(themeColor);
+        statusPanel.setOpaque(true);
+        
+        // Add a colored border to the main content pane
+        ((JComponent) getContentPane()).setBorder(BorderFactory.createLineBorder(themeColor, 3));
+        
+        revalidate();
+        repaint();
+    }
+
+    private void setupViewportListener(EditorTab tab) {
+        JViewport vp = (JViewport) tab.getParent();
+        vp.addChangeListener(e -> {
+            if (followMeActive && collab.isConnected() && editorTabs.getSelectedComponent() == vp.getParent()) {
+                viewportDebounce.restart();
+            }
+        });
+    }
+
+    private void sendViewportNow() {
+        getActiveEditor().ifPresent(tab -> {
+            try {
+                JViewport vp = (JViewport) tab.getParent();
+                int y = vp.getViewPosition().y;
+                int line = tab.getLineOfOffset(tab.viewToModel(new Point(0, y))) + 1;
+                collab.sendViewport(tab.getVirtualPath(), line);
+            } catch (Exception ignored) {}
         });
     }
 

@@ -53,12 +53,17 @@ public class CollabClient {
                         String text = new String(Base64.getDecoder().decode(p[2]), StandardCharsets.UTF_8);
                         ui.applyRemoteEdit(path, text);
                     }
-                } else if (msg.startsWith("CURSOR|")) {
-                    String[] p = msg.split("\\|", 5);
-                    if (p.length == 5) {
-                        ui.applyRemoteCursor(p[1], p[2], safe(p[3]), safe(p[4]));
-                    }
-                } else if (msg.startsWith("ROLE_INFO|")) {
+                    } else if (msg.startsWith("CURSOR|")) {
+                        String[] p = msg.split("\\|", 5);
+                        if (p.length == 5) {
+                            ui.applyRemoteCursor(p[1], p[2], safe(p[3]), safe(p[4]));
+                        }
+                    } else if (msg.startsWith("VIEWPORT|")) {
+                        String[] p = msg.split("\\|", 3);
+                        if (p.length == 3) {
+                            ui.applyRemoteViewport(p[1], safe(p[2]));
+                        }
+                    } else if (msg.startsWith("ROLE_INFO|")) {
                     String[] p = msg.split("\\|", 3);
                     if (p.length == 3) {
                         ui.onRoleInfo(p[1], p[2]);
@@ -99,6 +104,11 @@ public class CollabClient {
     public void sendCursor(String vpath, int dot, int mark) {
         if (!connected) return;
         sendLine("CURSOR|" + vpath + "|" + nickname + "|" + dot + "|" + mark);
+    }
+
+    public void sendViewport(String vpath, int line) {
+        if (!connected) return;
+        sendLine("VIEWPORT|" + vpath + "|" + line);
     }
 
     // compile
