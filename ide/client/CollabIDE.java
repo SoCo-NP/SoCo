@@ -14,10 +14,8 @@ import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
-import java.util.function.BooleanSupplier;
 
 public class CollabIDE extends JFrame implements CollabCallbacks {
     // UI
@@ -32,7 +30,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     private volatile boolean keystrokeMode = false;
     private final Map<String, Color> userColors = new HashMap<>();
     private final Map<String, String> userRoles = new HashMap<>();
-    private final Set<String> lockedFiles = new HashSet<>();
+    private final Set<String> connectedUsers = new HashSet<>();
     // Optimization: Fast lookup for tabs
     private final Map<String, EditorTab> tabMap = new HashMap<>();
 
@@ -44,7 +42,6 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     // Laser Pointer Mode
     private JToggleButton btnLaser;
     private boolean laserActive = false;
-    private final javax.swing.Timer laserDebounce;
 
     // Optimization: Cache role colors
     private static final Color COLOR_PROFESSOR = new Color(255, 105, 180, 110);
@@ -53,38 +50,13 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     // Attendance Check
     private JToggleButton btnAttendance;
     private AttendanceDialog attendanceDialog;
-    private static final String[] EXPECTED_STUDENTS = {"student1", "student2", "student3", "student4", "student5"};
+    private static final String[] EXPECTED_STUDENTS = {"유상완", "송승윤", "신성", "한기준", "김남윤"};
 
     public CollabIDE() {
         super("Mini IDE - IntelliJ style");
         
-        // Global Dark Theme Settings
-        try {
-            UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
-        } catch (Exception ignored) {}
-        UIManager.put("Panel.background", Color.DARK_GRAY);
-        UIManager.put("Panel.foreground", Color.WHITE);
-        UIManager.put("Label.foreground", Color.WHITE);
-        UIManager.put("Button.background", Color.DARK_GRAY);
-        UIManager.put("Button.foreground", Color.WHITE);
-        UIManager.put("TextField.background", Color.DARK_GRAY);
-        UIManager.put("TextField.foreground", Color.WHITE);
-        UIManager.put("TextField.caretForeground", Color.WHITE);
-        UIManager.put("TextArea.background", Color.DARK_GRAY);
-        UIManager.put("TextArea.foreground", Color.WHITE);
-        UIManager.put("ScrollPane.background", Color.DARK_GRAY);
-        UIManager.put("Viewport.background", Color.DARK_GRAY);
-        UIManager.put("Tree.background", Color.DARK_GRAY);
-        UIManager.put("Tree.foreground", Color.WHITE);
-        UIManager.put("Tree.textForeground", Color.WHITE);
-        UIManager.put("List.background", Color.DARK_GRAY);
-        UIManager.put("List.foreground", Color.WHITE);
-        UIManager.put("MenuBar.background", Color.DARK_GRAY);
-        UIManager.put("MenuBar.foreground", Color.WHITE);
-        UIManager.put("Menu.background", Color.DARK_GRAY);
-        UIManager.put("Menu.foreground", Color.WHITE);
-        UIManager.put("MenuItem.background", Color.DARK_GRAY);
-        UIManager.put("MenuItem.foreground", Color.WHITE);
+        
+        // Theme is applied in main() before this constructor
         
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setMinimumSize(new Dimension(1180, 780));
@@ -95,12 +67,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
         JSplitPane h = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, createFileTreePanel(), createEditorPanel());
         h.setResizeWeight(0.22);
-        h.setBackground(Color.DARK_GRAY);
 
         JScrollPane consoleScroll = new JScrollPane(console);
         console.setEditable(false);
-        console.setBackground(new Color(40, 40, 40));
-        console.setForeground(new Color(200, 200, 200));
         console.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         consoleScroll.setPreferredSize(new Dimension(0, 180));
 
@@ -108,8 +77,8 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         v.setResizeWeight(0.8);
 
         statusPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
-        statusPanel.setBackground(Color.DARK_GRAY);
-        statusLabel.setForeground(Color.WHITE);
+        // statusPanel.setBackground(ide.ui.Theme.STATUS_BAR_BG); // Optional: Keep or remove
+        // statusLabel.setForeground(ide.ui.Theme.STATUS_BAR_FG);
         statusPanel.add(statusLabel, BorderLayout.WEST);
 
         getContentPane().add(v, BorderLayout.CENTER);
@@ -133,11 +102,6 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         });
         viewportDebounce.setRepeats(false);
 
-        laserDebounce = new javax.swing.Timer(50, e -> {
-            // This timer is used to throttle laser updates if needed, 
-            // but we might just send them directly in mouseMoved for smoothness.
-            // For now, we'll use direct sending in the listener with a small check.
-        });
     }
 
     private JComponent createEditorPanel() {
@@ -219,16 +183,6 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         net.add(connect); net.add(disconnect); net.addSeparator(); net.add(keystroke);
         bar.add(net);
 
-        JMenu build = new JMenu("Build");
-        JMenuItem compile = new JMenuItem("Compile Active Java");
-        compile.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0));
-        compile.addActionListener(e -> actionCompileActiveJava());
-        JMenuItem run = new JMenuItem("Run Active Java");
-        run.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F10, 0));
-        run.addActionListener(e -> actionRunActiveJava());
-        build.add(compile);
-        build.add(run);
-        bar.add(build);
 
         return bar;
     }
@@ -237,8 +191,6 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         JToolBar tb = new JToolBar();
         JButton btnOpen = new JButton("Open Folder"); btnOpen.addActionListener(e -> chooseAndOpenProjectFolder());
         JButton btnSave = new JButton("Save"); btnSave.addActionListener(e -> actionSaveActive());
-        JButton btnCompile = new JButton("Compile"); btnCompile.addActionListener(e -> actionCompileActiveJava());
-        JButton btnRun = new JButton("Run"); btnRun.addActionListener(e -> actionRunActiveJava());
         JButton btnConnect = new JButton("Connect"); btnConnect.addActionListener(e -> promptConnect());
         
         btnFollowMe = new JToggleButton("Follow Me");
@@ -265,7 +217,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             }
         });
 
-        tb.add(btnOpen); tb.add(btnSave); tb.add(btnCompile); tb.add(btnRun); tb.addSeparator(); tb.add(btnConnect); tb.addSeparator(); tb.add(btnFollowMe); tb.add(btnLaser); tb.add(btnAttendance);
+        tb.add(btnOpen); tb.add(btnSave); tb.addSeparator(); tb.add(btnConnect); tb.addSeparator(); tb.add(btnFollowMe); tb.add(btnLaser); tb.add(btnAttendance);
         return tb;
     }
 
@@ -277,7 +229,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         fileTree.setRootVisible(true);
         fileTree.setShowsRootHandles(true);
         
-        // Dark theme for tree
+        // Default theme for tree
         DefaultTreeCellRenderer renderer = new DefaultTreeCellRenderer() {
             @Override public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean exp, boolean leaf, int row, boolean focus) {
                 super.getTreeCellRendererComponent(tree, value, sel, exp, leaf, row, focus);
@@ -289,10 +241,6 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                 return this;
             }
         };
-        renderer.setBackgroundNonSelectionColor(Color.DARK_GRAY);
-        renderer.setTextNonSelectionColor(Color.WHITE);
-        renderer.setBackgroundSelectionColor(new Color(60, 60, 60));
-        renderer.setTextSelectionColor(Color.WHITE);
         fileTree.setCellRenderer(renderer);
 
         // context menu
@@ -615,28 +563,22 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         if (r == JOptionPane.OK_OPTION) {
             try {
                 String selectedRole = (String) role.getSelectedItem();
-                collab.connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nick.getText().trim(), selectedRole);
+                String nickname = nick.getText().trim();
+                collab.connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nickname, selectedRole);
+                
+                // Register self in connectedUsers and userRoles
+                connectedUsers.add(nickname);
+                userRoles.put(nickname, selectedRole);
+                
                 statusLabel.setText("Connected");
                 log("Connected to " + host.getText() + ":" + port.getText() + " as " + selectedRole);
                 updateThemeForRole(selectedRole); // Apply theme immediately
+                updateAttendanceStatus(); // Update attendance to show self
                 getActiveEditor().ifPresent(this::sendSnapshotNow);
             } catch (Exception ex) { showError("연결 실패: " + ex.getMessage()); }
         }
     }
 
-    // ===== Build: compile (client-side) =====
-    private void actionCompileActiveJava() {
-        Optional<EditorTab> opt = getActiveEditor(); if (opt.isEmpty()) { showError("열린 탭이 없습니다."); return; }
-        EditorTab tab = opt.get();
-        File f = tab.getFile();
-        if (f == null) { showError("먼저 파일을 저장하세요(untitled는 컴파일 불가)."); return; }
-        if (!f.getName().endsWith(".java")) { showError("현재 탭은 .java 파일이 아닙니다."); return; }
-        if (tab.isDirty()) { if (!tab.saveTo(f)) { showError("저장 실패: 컴파일 취소"); return; } reloadFileTree(); }
-        String path = f.getAbsolutePath();
-        if (lockedFiles.contains(path)) { showError("이미 컴파일 중입니다(다른 사용자). 잠시 후 다시 시도"); return; }
-        log("[BUILD] Requesting compile lock: " + path);
-        collab.requestCompile(path);
-    }
 
     // ===== CollabCallbacks (from network) =====
     @Override public void applyRemoteEdit(String path, String text) {
@@ -673,16 +615,8 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
 
     @Override public void applyRemoteViewport(String path, int line) {
         SwingUtilities.invokeLater(() -> {
-            // Only follow if I am a student (or simply not the one broadcasting)
-            // But here we assume only Professor broadcasts, so everyone else follows.
-            // If I am Professor, I shouldn't follow myself (loop), but the server echoes back?
-            // Server broadcast logic usually excludes sender. So it's safe.
-            // However, if there are multiple professors, they might fight.
-            // For now, just apply it.
-            
             EditorTab tab = findTabByPath(path);
             if (tab == null) {
-                // If file not open, try to open it (if it's a real file)
                 File f = new File(path);
                 if (f.exists() && f.isFile()) {
                     openFileInEditor(f);
@@ -691,12 +625,11 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             }
             
             if (tab != null) {
-                editorTabs.setSelectedComponent(tab.getParent().getParent()); // Select tab (JScrollPane -> Tab)
+                editorTabs.setSelectedComponent(tab.getParent().getParent());
                 try {
                     int offset = tab.getLineStartOffset(Math.max(0, line - 1));
                     Rectangle rect = tab.modelToView(offset);
                     if (rect != null) {
-                        // Center the view if possible, or just scroll to top
                         JViewport vp = (JViewport) tab.getParent();
                         vp.setViewPosition(new Point(0, rect.y));
                     }
@@ -717,6 +650,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     @Override public void onRoleInfo(String nick, String role) {
         SwingUtilities.invokeLater(() -> {
             userRoles.put(nick, role);
+            connectedUsers.add(nick); // Track connected user
             refreshCursors();
             if (role.equals("Professor") || role.equals("Student")) {
                 String msg = "[ROLE] " + nick + " = " + role;
@@ -727,121 +661,10 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
                 updateThemeForRole(role);
             }
             
-            // Update attendance
             updateAttendanceStatus();
         });
     }
 
-    @Override public void onCompileGranted(String fpath, String byNick) {
-        SwingUtilities.invokeLater(() -> {
-            if (Objects.equals(byNick, collab.getNickname())) {
-                log("[BUILD] Granted. Compiling: " + fpath);
-                lockedFiles.add(fpath);
-                new Thread(() -> runJavac(fpath), "compile-thread").start();
-            } else {
-                lockedFiles.add(fpath);
-                log("[BUILD] " + byNick + " is compiling: " + fpath);
-            }
-        });
-    }
-    @Override public void onCompileDenied(String fpath, String holder) { SwingUtilities.invokeLater(() -> log("[BUILD] Denied. Current holder: " + holder + " for " + fpath)); }
-    @Override public void onCompileStart(String fpath, String nick) { SwingUtilities.invokeLater(() -> { log("[BUILD] START by " + nick + " → " + fpath); lockedFiles.add(fpath); }); }
-    @Override public void onCompileOut(String fpath, String nick, String line) { SwingUtilities.invokeLater(() -> log("[" + new File(fpath).getName() + "] " + nick + ": " + line)); }
-    @Override public void onCompileEnd(String fpath, String nick, int exit) { SwingUtilities.invokeLater(() -> log("[BUILD] END by " + nick + " (exit=" + exit + ") → " + fpath)); }
-    @Override public void onCompileReleased(String fpath, String nick) { SwingUtilities.invokeLater(() -> { lockedFiles.remove(fpath); log("[BUILD] RELEASED by " + nick + " → " + fpath); }); }
-
-    private void runJavac(String fpath) {
-        File file = new File(fpath);
-        if (!file.exists()) {
-            log("[BUILD] File not found: " + fpath);
-            collab.releaseCompile(fpath);
-            return;
-        }
-        if (projectRoot == null) {
-            log("[BUILD] Project root not set.");
-            collab.releaseCompile(fpath);
-            return;
-        }
-
-        collab.sendCompileStart(fpath);
-        // The file path should be relative to the project root for javac
-        String relativePath = projectRoot.toURI().relativize(file.toURI()).getPath();
-
-        ProcessBuilder pb = new ProcessBuilder("javac", "-d", "out", "-cp", "out", relativePath);
-        pb.directory(projectRoot); // Run from the project root
-        pb.redirectErrorStream(true);
-        try {
-            Process p = pb.start();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                String line; while ((line = br.readLine()) != null) { collab.sendCompileOut(fpath, line); onCompileOut(fpath, collab.getNickname(), line); }
-            }
-            int exit = p.waitFor();
-            collab.sendCompileEnd(fpath, exit);
-            onCompileEnd(fpath, collab.getNickname(), exit);
-        } catch (IOException | InterruptedException e) {
-            collab.sendCompileOut(fpath, "ERROR: " + e.getMessage());
-        } finally {
-            collab.releaseCompile(fpath);
-        }
-    }
-
-    private void actionRunActiveJava() {
-        Optional<EditorTab> opt = getActiveEditor();
-        if (opt.isEmpty()) {
-            showError("열린 탭이 없습니다.");
-            return;
-        }
-        EditorTab tab = opt.get();
-        File f = tab.getFile();
-        if (f == null) {
-            showError("먼저 파일을 저장하세요(untitled는 실행 불가).");
-            return;
-        }
-        if (!f.getName().endsWith(".java")) {
-            showError("현재 탭은 .java 파일이 아닙니다.");
-            return;
-        }
-        if (projectRoot == null) {
-            showError("프로젝트 폴더가 열려있지 않습니다. 'File > Open Folder'로 프로젝트를 먼저 여세요.");
-            return;
-        }
-
-        // Ensure the file is compiled and up-to-date.
-        // For simplicity, we'll just assume it's compiled.
-        // A better implementation would check timestamps or trigger a compile.
-
-        String relativePath = projectRoot.toURI().relativize(f.toURI()).getPath();
-        if (relativePath.startsWith("out/") || relativePath.startsWith("out\\")) {
-            showError("out 폴더 내의 파일은 직접 실행할 수 없습니다.");
-            return;
-        }
-        String className = relativePath.replaceFirst("\\.java$", "").replace(File.separatorChar, '.');
-
-        log("[RUN] Running: " + className);
-        new Thread(() -> runJavaProcess(className), "run-java-thread").start();
-    }
-
-    private void runJavaProcess(String className) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("java", "-cp", "out", className);
-            pb.directory(projectRoot);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    log("[RUN] " + line);
-                }
-            }
-            int exitCode = p.waitFor();
-            log("[RUN] Process finished with exit code " + exitCode);
-        } catch (IOException | InterruptedException e) {
-            showError("실행 오류: " + e.getMessage());
-            log("[RUN] ERROR: " + e.getMessage());
-        }
-    }
-
-    // ===== helpers =====
     private EditorTab findTabByPath(String path) {
         return tabMap.get(path);
     }
@@ -885,7 +708,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             btnAttendance.setVisible(false);
             updateLaserState();
         } else {
-            themeColor = Color.DARK_GRAY; // Default dark
+            themeColor = ide.ui.Theme.STATUS_BAR_BG; // Default dark
             titleSuffix = "";
             btnFollowMe.setVisible(false);
             followMeActive = false;
@@ -960,12 +783,17 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     // entry
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception ignored) {}
+            try {
+                // Use CrossPlatform (Metal) L&F for consistent custom theming
+                UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+            } catch (Exception ignored) {}
+            
+            // Apply Dark Theme BEFORE creating components
+            ide.ui.Theme.apply();
+            
             new CollabIDE().setVisible(true);
         });
     }
-    
-    // ===== Attendance Check Methods =====
     private void showAttendanceDialog() {
         if (attendanceDialog == null) {
             attendanceDialog = new AttendanceDialog(this);
@@ -1011,11 +839,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             
             JPanel panel = new JPanel();
             panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-            panel.setBackground(Color.DARK_GRAY);
             panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
             
             JLabel title = new JLabel("Student Attendance");
-            title.setForeground(Color.WHITE);
             title.setFont(title.getFont().deriveFont(16f).deriveFont(java.awt.Font.BOLD));
             title.setAlignmentX(Component.CENTER_ALIGNMENT);
             panel.add(title);
@@ -1023,14 +849,12 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             
             for (String student : EXPECTED_STUDENTS) {
                 JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT));
-                row.setBackground(Color.DARK_GRAY);
                 
                 JLabel indicator = new JLabel("●");
                 indicator.setFont(indicator.getFont().deriveFont(20f));
                 indicator.setForeground(Color.RED);
                 
                 JLabel nameLabel = new JLabel(student);
-                nameLabel.setForeground(Color.WHITE);
                 nameLabel.setFont(nameLabel.getFont().deriveFont(14f));
                 
                 row.add(indicator);
@@ -1054,7 +878,8 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             for (String student : EXPECTED_STUDENTS) {
                 JLabel indicator = studentLabels.get(student);
                 if (indicator != null) {
-                    boolean isPresent = userRoles.containsKey(student);
+                    // Check if student is connected (either in userRoles or connectedUsers)
+                    boolean isPresent = connectedUsers.contains(student) || userRoles.containsKey(student);
                     indicator.setForeground(isPresent ? Color.GREEN : Color.RED);
                 }
             }

@@ -60,11 +60,12 @@ public class EditorTab extends JTextArea {
         setMargin(new Insets(8,8,8,8));
 
         // Dark Mode Theme
-        setBackground(new Color(30, 30, 30)); // #1E1E1E
-        setForeground(new Color(212, 212, 212)); // #D4D4D4
-        setCaretColor(Color.WHITE);
-        setSelectionColor(new Color(38, 79, 120)); // #264F78
-        setSelectedTextColor(Color.WHITE);
+        // Dark Mode Theme (Editor Only)
+        setBackground(ide.ui.Theme.EDITOR_BG);
+        setForeground(ide.ui.Theme.EDITOR_FG);
+        setCaretColor(ide.ui.Theme.EDITOR_CARET);
+        setSelectionColor(ide.ui.Theme.EDITOR_SELECTION);
+        setSelectedTextColor(ide.ui.Theme.EDITOR_SELECTION_FG);
 
         getDocument().addUndoableEditListener(e -> { undoManager.addEdit(e.getEdit()); markDirty(true); });
         getDocument().addDocumentListener(new DocumentListener() {
@@ -175,7 +176,7 @@ public class EditorTab extends JTextArea {
             try {
                 Rectangle r = modelToView(rc.dot);
                 if (r != null) {
-                    g.setColor(rc.color.darker());
+                    g.setColor(rc.color);
                     g.fillRect(r.x, r.y, 2, r.height);
                     g.drawString(" ", r.x, r.y - 2); // simple label placeholder
                 }

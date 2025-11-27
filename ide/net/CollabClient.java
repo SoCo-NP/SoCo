@@ -73,20 +73,6 @@ public class CollabClient {
                     if (p.length == 3) {
                         ui.onRoleInfo(p[1], p[2]);
                     }
-                } else if (msg.startsWith("COMPILE_GRANTED|")) {
-                    String[] p = msg.split("\\|", 3); if (p.length == 3) ui.onCompileGranted(p[1], p[2]);
-                } else if (msg.startsWith("COMPILE_DENIED|")) {
-                    String[] p = msg.split("\\|", 3); if (p.length == 3) ui.onCompileDenied(p[1], p[2]);
-                } else if (msg.startsWith("COMPILE_START|")) {
-                    String[] p = msg.split("\\|", 3); if (p.length == 3) ui.onCompileStart(p[1], p[2]);
-                } else if (msg.startsWith("COMPILE_OUT|")) {
-                    String[] p = msg.split("\\|", 4);
-                    if (p.length == 4) ui.onCompileOut(p[1], p[2],
-                            new String(Base64.getDecoder().decode(p[3]), StandardCharsets.UTF_8));
-                } else if (msg.startsWith("COMPILE_END|")) {
-                    String[] p = msg.split("\\|", 4); if (p.length == 4) ui.onCompileEnd(p[1], p[2], safe(p[3]));
-                } else if (msg.startsWith("COMPILE_RELEASE|")) {
-                    String[] p = msg.split("\\|", 3); if (p.length == 3) ui.onCompileReleased(p[1], p[2]);
                 } else if (msg.startsWith("FILE_CREATE|") || msg.startsWith("FILE_DELETE|") || msg.startsWith("FILE_RENAME|")) {
                     // 순수 브로드캐스트: UI가 콘솔에만 적절히 표시(실제 디스크 조작은 각자 로컬)
                     // 필요시 클라이언트가 트리 새로고침 여부를 판단할 수 있음
@@ -122,16 +108,6 @@ public class CollabClient {
     }
 
     // compile
-    public void requestCompile(String fpath) { if (connected) sendLine("COMPILE_REQ|" + fpath + "|" + nickname); }
-    public void releaseCompile(String fpath) { if (connected) sendLine("COMPILE_RELEASE|" + fpath + "|" + nickname); }
-    public void sendCompileStart(String fpath) { if (connected) sendLine("COMPILE_START|" + fpath + "|" + nickname); }
-    public void sendCompileOut(String fpath, String line) {
-        if (connected) {
-            String b64 = Base64.getEncoder().encodeToString(line.getBytes(StandardCharsets.UTF_8));
-            sendLine("COMPILE_OUT|" + fpath + "|" + nickname + "|" + b64);
-        }
-    }
-    public void sendCompileEnd(String fpath, int exit) { if (connected) sendLine("COMPILE_END|" + fpath + "|" + nickname + "|" + exit); }
 
     // file ops broadcast (for logs)
     public void sendFileCreate(String fpath, boolean isDir) { if (connected) sendLine("FILE_CREATE|" + fpath + "|" + isDir + "|" + nickname); }

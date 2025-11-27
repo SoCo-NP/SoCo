@@ -21,8 +21,9 @@ public class LineNumberView extends JComponent implements DocumentListener, Care
         setFont(area.getFont());
         
         // Dark Mode Theme
-        setBackground(new Color(30, 30, 30)); // #1E1E1E
-        setForeground(new Color(133, 133, 133)); // #858585
+        // Dark Mode Theme (Editor Only)
+        setBackground(ide.ui.Theme.EDITOR_LINE_NUMBER_BG);
+        setForeground(ide.ui.Theme.EDITOR_LINE_NUMBER_FG);
         
         setBorder(BorderFactory.createEmptyBorder(0,0,0,MARGIN));
     }
