@@ -183,6 +183,24 @@ public class TabManager {
     }
 
     /**
+     * 원격에서 수신된 커서 위치를 반영한다.
+     *
+     * @param path  파일 경로
+     * @param nick  사용자 닉네임
+     * @param color 커서 색상
+     * @param dot   커서 위치
+     * @param mark  선택 영역 시작점
+     */
+    public void applyRemoteCursor(String path, String nick, Color color, int dot, int mark) {
+        SwingUtilities.invokeLater(() -> {
+            EditorTab tab = findTabByPath(path);
+            if (tab != null) {
+                tab.updateRemoteCursor(nick, dot, mark, color);
+            }
+        });
+    }
+
+    /**
      * 현재 활성화된 탭을 닫는다.
      *
      * @param onDirtyDiskSave     저장되지 않은 디스크 파일일 경우 실행할 콜백

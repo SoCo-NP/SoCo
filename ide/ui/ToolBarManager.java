@@ -312,8 +312,13 @@ public class ToolBarManager {
      * @param isProfessor 교수자 여부
      */
     public void updateRoleUI(boolean isProfessor) {
+        // 교수자 전용 버튼
+        btnFollowMe.setVisible(isProfessor);
+        btnLaser.setVisible(isProfessor);
         btnAttendance.setVisible(isProfessor);
-        btnQuestionDialog.setVisible(isProfessor); // 교수자일 때만 표시
-        btnQuestion.setVisible(!isProfessor); // 학생일 때만 표시
+        btnQuestionDialog.setVisible(isProfessor);
+
+        // 학생 전용 버튼
+        btnQuestion.setVisible(!isProfessor);
     }
 }

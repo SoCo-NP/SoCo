@@ -234,9 +234,8 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
 
     @Override
     public void applyRemoteCursor(String path, String nick, int dot, int mark) {
-        // TabManager doesn't currently expose remote cursor API
-        // Color color = sessionMgr.getColorForNick(nick);
-        // TODO: Implement when TabManager adds remote cursor support
+        Color color = sessionMgr.getColorForNick(nick);
+        tabManager.applyRemoteCursor(path, nick, color, dot, mark);
     }
 
     @Override
