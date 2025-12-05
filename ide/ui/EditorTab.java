@@ -1,6 +1,6 @@
 package ide.ui;
 
-import ide.net.CollabClient;
+import ide.app.CollabActions;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -23,30 +23,30 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 public class EditorTab extends JTextArea {
-    private File file;               // null이면 Untitled
+    private File file; // null이면 Untitled
     private boolean dirty = false;
     private final UndoManager undoManager = new UndoManager();
     private int baseFontSize = 14;
     private final java.util.Map<String, RemoteCursor> remoteCursors = new java.util.concurrent.ConcurrentHashMap<>();
     private Point remoteLaserPoint = null;
 
-    private final CollabClient collab;
+    private final CollabActions collab;
     private final BooleanSupplier isKeystrokeMode;
     private final Consumer<EditorTab> onUpdate;
     private boolean suppressBroadcast = false;
     private final String virtualPath; // untitled:UUID or file path
-    private final javax.swing.Timer debounce;       // 200ms text
+    private final javax.swing.Timer debounce; // 200ms text
     private final javax.swing.Timer cursorDebounce; // 120ms caret
 
     // remote cursors
     private final Map<String, Object> cursorTags = new HashMap<>();
 
     public EditorTab(File file,
-                     String text,
-                     String providedVirtualPath,
-                     CollabClient collab,
-                     BooleanSupplier keystrokeMode,
-                     Consumer<EditorTab> onUpdate) {
+            String text,
+            String providedVirtualPath,
+            CollabActions collab,
+            BooleanSupplier keystrokeMode,
+            Consumer<EditorTab> onUpdate) {
         super(text);
         this.file = file;
         this.collab = collab;
@@ -56,8 +56,10 @@ public class EditorTab extends JTextArea {
                 : (providedVirtualPath != null ? providedVirtualPath : ("untitled:" + UUID.randomUUID()));
 
         setFont(new Font(Font.MONOSPACED, Font.PLAIN, baseFontSize));
-        setTabSize(4); setLineWrap(false); setWrapStyleWord(false);
-        setMargin(new Insets(8,8,8,8));
+        setTabSize(4);
+        setLineWrap(false);
+        setWrapStyleWord(false);
+        setMargin(new Insets(8, 8, 8, 8));
 
         // Dark Mode Theme
         // Dark Mode Theme (Editor Only)
@@ -67,52 +69,103 @@ public class EditorTab extends JTextArea {
         setSelectionColor(ide.ui.Theme.EDITOR_SELECTION);
         setSelectedTextColor(ide.ui.Theme.EDITOR_SELECTION_FG);
 
-        getDocument().addUndoableEditListener(e -> { undoManager.addEdit(e.getEdit()); markDirty(true); });
+        getDocument().addUndoableEditListener(e -> {
+            undoManager.addEdit(e.getEdit());
+            markDirty(true);
+        });
         getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { scheduleBroadcast(); markDirty(true); }
-            @Override public void removeUpdate(DocumentEvent e) { scheduleBroadcast(); markDirty(true); }
-            @Override public void changedUpdate(DocumentEvent e) { scheduleBroadcast(); markDirty(true); }
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                scheduleBroadcast();
+                markDirty(true);
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                scheduleBroadcast();
+                markDirty(true);
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                scheduleBroadcast();
+                markDirty(true);
+            }
         });
 
-        addCaretListener(e -> { onUpdate.accept(EditorTab.this); scheduleCursorSend(); });
+        addCaretListener(e -> {
+            onUpdate.accept(EditorTab.this);
+            scheduleCursorSend();
+        });
 
         // Ctrl/Cmd+S
         getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S,
                 Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()), "save");
         getActionMap().put("save", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) { onUpdate.accept(EditorTab.this); }
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                onUpdate.accept(EditorTab.this);
+            }
         });
 
         // timers
         debounce = new javax.swing.Timer(200, e -> {
-            if (!suppressBroadcast && collab.isConnected()) collab.sendSnapshot(getVirtualPath(), getText());
+            if (!suppressBroadcast && collab.isConnected())
+                collab.sendSnapshot(getVirtualPath(), getText());
         });
         debounce.setRepeats(false);
 
         cursorDebounce = new javax.swing.Timer(120, e -> {
-            if (!collab.isConnected()) return;
+            if (!collab.isConnected())
+                return;
             collab.sendCursor(getVirtualPath(), getCaret().getDot(), getCaret().getMark());
         });
         cursorDebounce.setRepeats(false);
     }
 
     private void scheduleBroadcast() {
-        if (suppressBroadcast) return;
+        if (suppressBroadcast)
+            return;
         if (isKeystrokeMode.getAsBoolean()) {
-            if (collab.isConnected()) collab.sendSnapshot(getVirtualPath(), getText());
+            if (collab.isConnected())
+                collab.sendSnapshot(getVirtualPath(), getText());
         } else {
             debounce.restart();
         }
     }
-    private void scheduleCursorSend() { cursorDebounce.restart(); }
 
-    public File getFile() { return file; }
-    public void setFile(File f) { this.file = f; this.dirty = false; onUpdate.accept(this); }
-    public String getDisplayName() { return file != null ? file.getName() : "Untitled"; }
-    public boolean isDirty() { return dirty; }
-    public String getVirtualPath() { return (file != null) ? file.getAbsolutePath() : virtualPath; }
+    private void scheduleCursorSend() {
+        cursorDebounce.restart();
+    }
 
-    public void markDirty(boolean d) { if (this.dirty != d) { this.dirty = d; } onUpdate.accept(this); }
+    public File getFile() {
+        return file;
+    }
+
+    public void setFile(File f) {
+        this.file = f;
+        this.dirty = false;
+        onUpdate.accept(this);
+    }
+
+    public String getDisplayName() {
+        return file != null ? file.getName() : "Untitled";
+    }
+
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    public String getVirtualPath() {
+        return (file != null) ? file.getAbsolutePath() : virtualPath;
+    }
+
+    public void markDirty(boolean d) {
+        if (this.dirty != d) {
+            this.dirty = d;
+        }
+        onUpdate.accept(this);
+    }
 
     public boolean saveTo(File target) {
         Objects.requireNonNull(target, "target");
@@ -122,15 +175,61 @@ public class EditorTab extends JTextArea {
             JOptionPane.showMessageDialog(this, "저장 실패: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             return false;
         }
-        this.file = target; this.dirty = false; onUpdate.accept(this); return true;
+        this.file = target;
+        this.dirty = false;
+        onUpdate.accept(this);
+        return true;
     }
 
-    public void undo() { try { if (undoManager.canUndo()) undoManager.undo(); } catch (CannotUndoException ignored) {} onUpdate.accept(this); }
-    public void redo() { try { if (undoManager.canRedo()) undoManager.redo(); } catch (CannotRedoException ignored) {} onUpdate.accept(this); }
-    public void adjustFont(int d) { baseFontSize = Math.max(8, Math.min(48, baseFontSize + d)); setFont(getFont().deriveFont((float)baseFontSize)); onUpdate.accept(this); }
-    public void resetFont() { baseFontSize = 14; setFont(getFont().deriveFont((float) baseFontSize)); onUpdate.accept(this); }
-    public int getCaretLine() { int c = getCaretPosition(); try { return getLineOfOffset(c) + 1; } catch (BadLocationException e) { return 1; } }
-    public int getCaretCol() { int c = getCaretPosition(); try { int l = getLineOfOffset(c); int s = getLineStartOffset(l); return c - s + 1; } catch (BadLocationException e) { return 1; } }
+    public void undo() {
+        try {
+            if (undoManager.canUndo())
+                undoManager.undo();
+        } catch (CannotUndoException ignored) {
+        }
+        onUpdate.accept(this);
+    }
+
+    public void redo() {
+        try {
+            if (undoManager.canRedo())
+                undoManager.redo();
+        } catch (CannotRedoException ignored) {
+        }
+        onUpdate.accept(this);
+    }
+
+    public void adjustFont(int d) {
+        baseFontSize = Math.max(8, Math.min(48, baseFontSize + d));
+        setFont(getFont().deriveFont((float) baseFontSize));
+        onUpdate.accept(this);
+    }
+
+    public void resetFont() {
+        baseFontSize = 14;
+        setFont(getFont().deriveFont((float) baseFontSize));
+        onUpdate.accept(this);
+    }
+
+    public int getCaretLine() {
+        int c = getCaretPosition();
+        try {
+            return getLineOfOffset(c) + 1;
+        } catch (BadLocationException e) {
+            return 1;
+        }
+    }
+
+    public int getCaretCol() {
+        int c = getCaretPosition();
+        try {
+            int l = getLineOfOffset(c);
+            int s = getLineStartOffset(l);
+            return c - s + 1;
+        } catch (BadLocationException e) {
+            return 1;
+        }
+    }
 
     // --- remote apply ---
     public void applyRemoteText(String text) {
@@ -142,21 +241,28 @@ public class EditorTab extends JTextArea {
                 viewPos = ((JViewport) getParent()).getViewPosition();
             }
             setText(text);
-            try { setCaretPosition(Math.min(caret, getDocument().getLength())); } catch (Exception ignored) {}
+            try {
+                setCaretPosition(Math.min(caret, getDocument().getLength()));
+            } catch (Exception ignored) {
+            }
             if (viewPos != null && getParent() instanceof JViewport) {
                 ((JViewport) getParent()).setViewPosition(viewPos);
             }
             markDirty(true);
-        } finally { suppressBroadcast = false; }
+        } finally {
+            suppressBroadcast = false;
+        }
     }
 
     public void updateRemoteCursor(String nick, int dot, int mark, Color color) {
         Highlighter hl = getHighlighter();
         RemoteCursor old = remoteCursors.get(nick);
-        if (old != null && old.tag != null) hl.removeHighlight(old.tag);
+        if (old != null && old.tag != null)
+            hl.removeHighlight(old.tag);
 
         int len = getDocument().getLength();
-        if (len == 0) return;
+        if (len == 0)
+            return;
         dot = Math.min(Math.max(0, dot), len);
         mark = Math.min(Math.max(0, mark), len);
 
@@ -164,11 +270,13 @@ public class EditorTab extends JTextArea {
             Object tag = hl.addHighlight(Math.min(dot, mark), Math.max(dot, mark),
                     new DefaultHighlighter.DefaultHighlightPainter(color));
             remoteCursors.put(nick, new RemoteCursor(tag, dot, mark, color));
-        } catch (BadLocationException ignored) {}
+        } catch (BadLocationException ignored) {
+        }
         repaint();
     }
 
-    @Override protected void paintComponent(Graphics g) {
+    @Override
+    protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         // Draw remote cursors (vertical lines)
         g.setColor(Color.BLACK);
@@ -180,11 +288,13 @@ public class EditorTab extends JTextArea {
                     g.fillRect(r.x, r.y, 2, r.height);
                     g.drawString(" ", r.x, r.y - 2); // simple label placeholder
                 }
-            } catch (BadLocationException ignored) {}
+            } catch (BadLocationException ignored) {
+            }
         }
     }
 
-    @Override public void paintChildren(Graphics g) {
+    @Override
+    public void paintChildren(Graphics g) {
         super.paintChildren(g);
         // Draw Laser
         if (remoteLaserPoint != null) {
@@ -208,8 +318,12 @@ public class EditorTab extends JTextArea {
         Object tag;
         int dot, mark;
         Color color;
+
         RemoteCursor(Object tag, int dot, int mark, Color color) {
-            this.tag = tag; this.dot = dot; this.mark = mark; this.color = color;
+            this.tag = tag;
+            this.dot = dot;
+            this.mark = mark;
+            this.color = color;
         }
     }
 }

@@ -1,6 +1,6 @@
 package ide.ui;
 
-import ide.net.CollabClient;
+import ide.app.CollabActions;
 
 import javax.swing.*;
 import java.awt.*;
@@ -12,7 +12,7 @@ public class ToolBarManager {
     private final JToolBar toolBar = new JToolBar();
     private final JMenuBar menuBar = new JMenuBar();
     private final Component parentFrame;
-    private final CollabClient collab;
+    private final CollabActions collab;
     private final TabManager tabManager;
     private final FileTreeManager fileTreeManager;
 
@@ -23,7 +23,7 @@ public class ToolBarManager {
 
     private final Runnable promptConnectAction;
 
-    public ToolBarManager(Component parentFrame, CollabClient collab, TabManager tabManager,
+    public ToolBarManager(Component parentFrame, CollabActions collab, TabManager tabManager,
             FileTreeManager fileTreeManager, Runnable promptConnectAction) {
         this.parentFrame = parentFrame;
         this.collab = collab;

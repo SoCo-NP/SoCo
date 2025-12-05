@@ -1,6 +1,6 @@
 package ide.ui;
 
-import ide.net.CollabClient;
+import ide.app.CollabActions;
 import ide.ui.EditorTab;
 import ide.ui.LineNumberView;
 
@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 public class TabManager {
     private final JTabbedPane editorTabs = new JTabbedPane();
     private final Map<String, EditorTab> tabMap = new HashMap<>(); // Virtual Path -> Tab
-    private final CollabClient collab;
+    private final CollabActions collab;
     private final BooleanSupplier isKeystrokeMode;
     private final Consumer<EditorTab> onTabUpdated;
 
@@ -29,14 +29,15 @@ public class TabManager {
     // Laser
     private boolean laserActive = false;
 
-    public TabManager(CollabClient collab, BooleanSupplier isKeystrokeMode, Consumer<EditorTab> onTabUpdated) {
+    public TabManager(CollabActions collab, BooleanSupplier isKeystrokeMode, Consumer<EditorTab> onTabUpdated) {
         this.collab = collab;
         this.isKeystrokeMode = isKeystrokeMode;
         this.onTabUpdated = onTabUpdated;
 
         editorTabs.addChangeListener(e -> {
             getActiveEditor().ifPresent(tab -> {
-               if(collab.isConnected()) collab.sendSnapshot(tab.getVirtualPath(), tab.getText());
+                if (collab.isConnected())
+                    collab.sendSnapshot(tab.getVirtualPath(), tab.getText());
             });
             if (followMeActive && collab.isConnected()) {
                 sendViewportNow();
@@ -44,7 +45,8 @@ public class TabManager {
         });
 
         viewportDebounce = new Timer(100, e -> {
-            if (followMeActive && collab.isConnected()) sendViewportNow();
+            if (followMeActive && collab.isConnected())
+                sendViewportNow();
         });
         viewportDebounce.setRepeats(false);
     }
@@ -68,7 +70,7 @@ public class TabManager {
             JOptionPane.showMessageDialog(editorTabs, "파일을 열 수 없습니다: " + ex.getMessage());
         }
     }
-    
+
     public void openUntitled() {
         addTab(null, "", null);
     }
@@ -77,13 +79,14 @@ public class TabManager {
         EditorTab tab = new EditorTab(file, text, vPathOverride, collab, isKeystrokeMode, onTabUpdated);
         JScrollPane sp = new JScrollPane(tab);
         sp.setRowHeaderView(new LineNumberView(tab));
-        
+
         String title = tab.getDisplayName();
         editorTabs.addTab(title, sp);
         int idx = editorTabs.getTabCount() - 1;
         editorTabs.setSelectedIndex(idx);
-        editorTabs.setToolTipTextAt(idx, tab.getFile() != null ? tab.getFile().getAbsolutePath() : tab.getVirtualPath());
-        
+        editorTabs.setToolTipTextAt(idx,
+                tab.getFile() != null ? tab.getFile().getAbsolutePath() : tab.getVirtualPath());
+
         tabMap.put(tab.getVirtualPath(), tab);
         setupViewportListener(tab);
         setupLaserListener(tab);
@@ -98,7 +101,8 @@ public class TabManager {
 
     public Optional<EditorTab> getActiveEditor() {
         int idx = editorTabs.getSelectedIndex();
-        if (idx < 0) return Optional.empty();
+        if (idx < 0)
+            return Optional.empty();
         return Optional.of(getTabAt(idx));
     }
 
@@ -112,7 +116,7 @@ public class TabManager {
             if (tab == null) {
                 // Open new tab if remote sends edit for unknown file
                 File f = (path.startsWith("untitled:")) ? null : new File(path);
-                addTab(f, text, (f==null)?path:null);
+                addTab(f, text, (f == null) ? path : null);
             } else {
                 tab.applyRemoteText(text);
             }
@@ -120,17 +124,18 @@ public class TabManager {
     }
 
     public void closeActiveTab(Runnable onDirtyDiskSave, Runnable onDirtyUntitledSave) {
-        // Logic simplified: Just remove if simple. For full logic (save confirm), ideally CollabIDE delegates to here.
+        // Logic simplified: Just remove if simple. For full logic (save confirm),
+        // ideally CollabIDE delegates to here.
         // For refactoring, let's keep it simple or port the confirm logic.
         // For now, simple remove.
-         int idx = editorTabs.getSelectedIndex();
-         if(idx >= 0) {
-             EditorTab t = getTabAt(idx);
-             tabMap.remove(t.getVirtualPath());
-             editorTabs.removeTabAt(idx);
-         }
+        int idx = editorTabs.getSelectedIndex();
+        if (idx >= 0) {
+            EditorTab t = getTabAt(idx);
+            tabMap.remove(t.getVirtualPath());
+            editorTabs.removeTabAt(idx);
+        }
     }
-    
+
     public void closeTabsUnder(String basePath) {
         for (int i = editorTabs.getTabCount() - 1; i >= 0; i--) {
             EditorTab t = getTabAt(i);
@@ -143,7 +148,7 @@ public class TabManager {
             }
         }
     }
-    
+
     public void updateTabsOnRename(String oldPath, String newPath) {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
             EditorTab t = getTabAt(i);
@@ -160,23 +165,28 @@ public class TabManager {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
             if (getTabAt(i) == tab) {
                 String title = tab.getDisplayName();
-                if (tab.isDirty()) title = "* " + title;
+                if (tab.isDirty())
+                    title = "* " + title;
                 editorTabs.setTitleAt(i, title);
-                editorTabs.setToolTipTextAt(i, tab.getFile() != null ? tab.getFile().getAbsolutePath() : tab.getVirtualPath());
+                editorTabs.setToolTipTextAt(i,
+                        tab.getFile() != null ? tab.getFile().getAbsolutePath() : tab.getVirtualPath());
                 break;
             }
         }
     }
 
-    public int getTabCount() { return editorTabs.getTabCount(); }
+    public int getTabCount() {
+        return editorTabs.getTabCount();
+    }
 
     // --- Sync Features ---
 
     public void setFollowMe(boolean active) {
         this.followMeActive = active;
-        if (active) sendViewportNow();
+        if (active)
+            sendViewportNow();
     }
-    
+
     public void setLaser(boolean active) {
         this.laserActive = active;
         updateLaserState();
@@ -193,12 +203,15 @@ public class TabManager {
 
     private void setupLaserListener(EditorTab tab) {
         tab.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-            @Override public void mouseMoved(java.awt.event.MouseEvent e) {
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
                 if (laserActive && collab.isConnected()) {
                     collab.sendLaser(tab.getVirtualPath(), e.getX(), e.getY());
                 }
             }
-            @Override public void mouseDragged(java.awt.event.MouseEvent e) {
+
+            @Override
+            public void mouseDragged(java.awt.event.MouseEvent e) {
                 if (laserActive && collab.isConnected()) {
                     collab.sendLaser(tab.getVirtualPath(), e.getX(), e.getY());
                 }
@@ -213,16 +226,17 @@ public class TabManager {
                 int y = vp.getViewPosition().y;
                 int line = tab.getLineOfOffset(tab.viewToModel(new Point(0, y))) + 1;
                 collab.sendViewport(tab.getVirtualPath(), line);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         });
     }
-    
+
     private void updateLaserState() {
         if (!laserActive && collab.isConnected()) {
             getActiveEditor().ifPresent(tab -> collab.sendLaser(tab.getVirtualPath(), -1, -1));
         }
         // Cursor update
-         getActiveEditor().ifPresent(tab -> {
+        getActiveEditor().ifPresent(tab -> {
             if (laserActive) {
                 tab.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
             } else {
@@ -230,10 +244,10 @@ public class TabManager {
             }
         });
     }
-    
+
     // Remote Viewport
     public void applyRemoteViewport(String path, int line) {
-         SwingUtilities.invokeLater(() -> {
+        SwingUtilities.invokeLater(() -> {
             EditorTab tab = findTabByPath(path);
             if (tab == null) {
                 // If not open, ignore or open? Original logic: opened it.
@@ -252,15 +266,17 @@ public class TabManager {
                         JViewport vp = (JViewport) tab.getParent();
                         vp.setViewPosition(new Point(0, rect.y));
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
         });
     }
-    
+
     public void applyRemoteLaser(String path, int x, int y) {
-         SwingUtilities.invokeLater(() -> {
+        SwingUtilities.invokeLater(() -> {
             EditorTab tab = findTabByPath(path);
-            if (tab != null) tab.updateRemoteLaser(x, y);
+            if (tab != null)
+                tab.updateRemoteLaser(x, y);
         });
     }
 }

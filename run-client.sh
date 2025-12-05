@@ -18,4 +18,4 @@ echo "[1/2] 컴파일 중..."
 javac -d out $(find ide -name "*.java")
 
 echo "[2/2] 클라이언트 실행 중..."
-java -cp out ide.client.CollabIDE
+java -cp out ide.app.CollabIDE

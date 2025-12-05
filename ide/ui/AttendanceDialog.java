@@ -1,4 +1,4 @@
-package ide.client;
+package ide.ui;
 
 import javax.swing.*;
 import java.awt.*;

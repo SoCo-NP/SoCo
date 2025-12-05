@@ -1,4 +1,4 @@
-package ide.client;
+package ide.app;
 
 import ide.net.CollabClient;
 import ide.net.CollabCallbacks;
@@ -7,6 +7,7 @@ import ide.ui.FileTreeManager;
 import ide.ui.TabManager;
 import ide.ui.ToolBarManager;
 import ide.ui.Theme;
+import ide.domain.Role;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -14,38 +15,39 @@ import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
 
-public class CollabIDE extends JFrame implements CollabCallbacks {
-    // Core Managers
-    private final CollabClient collab;
+/**
+ * Controller class in the Application Layer.
+ * Orchestrates UI (ide.ui), Network (ide.net), and Domain (ide.domain).
+ */
+public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions {
+    // Core Managers (UI Layer)
     private final TabManager tabManager;
     private final FileTreeManager fileTreeManager;
     private final ToolBarManager toolBarManager;
+
+    // Infrastructure Layer
+    private final CollabClient collab;
+
+    // Domain State
+    private volatile boolean keystrokeMode = false;
+    private final Map<String, Color> userColors = new HashMap<>();
+    private final Map<String, Role> userRoles = new HashMap<>(); // Using Domain Object
 
     // UI Components
     private final JTextArea console = new JTextArea();
     private final JLabel statusLabel = new JLabel("Offline");
     private final JPanel statusPanel = new JPanel(new BorderLayout());
 
-    // State
-    private volatile boolean keystrokeMode = false;
-    private final Map<String, Color> userColors = new HashMap<>(); // Might fail if others need it, but mostly internal
-                                                                   // for cursor color
-    private final Map<String, String> userRoles = new HashMap<>();
-
-    // Attendance
-    private AttendanceDialog attendanceDialog;
-
     public CollabIDE() {
-        super("Mini IDE - IntelliJ style");
+        super("Mini IDE - Layered Architecture");
 
-        // 1. Initialize Network
-        collab = new CollabClient(this);
+        // 1. Initialize Network (Infra)
+        collab = new CollabClient(this); // Pass callbacks
 
-        // 2. Initialize Managers
-        // Pass 'this' as component parent, and callbacks
-        tabManager = new TabManager(collab, () -> keystrokeMode, this::onTabUpdated);
-        fileTreeManager = new FileTreeManager(this, collab, tabManager);
-        toolBarManager = new ToolBarManager(this, collab, tabManager, fileTreeManager, this::promptConnect);
+        // 2. Initialize Managers (UI) - Pass 'this' as CollabActions
+        tabManager = new TabManager(this, () -> keystrokeMode, this::onTabUpdated);
+        fileTreeManager = new FileTreeManager(this, this, tabManager);
+        toolBarManager = new ToolBarManager(this, this, tabManager, fileTreeManager, this::promptConnect);
 
         // 3. Setup UI Layout
         setupUI();
@@ -58,8 +60,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                // Simplified: Just close. Ideally check tabs.
-                collab.disconnect();
+                disconnect();
                 dispose();
             }
         });
@@ -88,7 +89,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         getContentPane().add(statusPanel, BorderLayout.SOUTH);
     }
 
-    // --- Logic Interfacing ---
+    // --- Application Logic (Controller) ---
 
     private void onTabUpdated(EditorTab tab) {
         String path = tab.getVirtualPath();
@@ -120,20 +121,97 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             try {
                 String selectedRole = (String) role.getSelectedItem();
                 String nickname = nick.getText().trim();
-                collab.connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nickname, selectedRole);
 
-                userRoles.put(nickname, selectedRole);
-                statusLabel.setText("Connected");
-                log("Connected to " + host.getText() + ":" + port.getText() + " as " + selectedRole);
-                updateThemeForRole(selectedRole);
-                // Attendance sync, etc...
+                // Controller Logic: Update Domain & Trigger Infra
+                connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nickname, selectedRole);
+
             } catch (Exception ex) {
                 showError("연결 실패: " + ex.getMessage());
             }
         }
     }
 
-    // --- CollabCallbacks ---
+    // --- CollabActions Implementation (UI -> Controller) ---
+
+    @Override
+    public void connect(String host, int port, String nickname, String roleStr) {
+        try {
+            collab.connect(host, port, nickname, roleStr);
+            Role role = Role.fromString(roleStr);
+            userRoles.put(nickname, role);
+
+            statusLabel.setText("Connected");
+            log("Connected to " + host + ":" + port + " as " + role);
+            updateThemeForRole(role);
+        } catch (Exception e) {
+            showError(e.getMessage());
+        }
+    }
+
+    @Override
+    public void disconnect() {
+        collab.disconnect();
+        statusLabel.setText("Offline");
+        log("Disconnected");
+    }
+
+    @Override
+    public boolean isConnected() {
+        return collab.isConnected();
+    }
+
+    @Override
+    public String getNickname() {
+        return collab.getNickname();
+    }
+
+    @Override
+    public void setFollowMe(boolean active) {
+        toolBarManager.getBtnFollowMe().setSelected(active); // Sync UI state
+        // In real app, might broadcast state
+    }
+
+    @Override
+    public void setLaser(boolean active) {
+        toolBarManager.getBtnLaser().setSelected(active);
+    }
+
+    @Override
+    public void sendSnapshot(String vPath, String text) {
+        collab.sendSnapshot(vPath, text);
+    }
+
+    @Override
+    public void sendCursor(String vPath, int dot, int mark) {
+        collab.sendCursor(vPath, dot, mark);
+    }
+
+    @Override
+    public void sendViewport(String vPath, int line) {
+        collab.sendViewport(vPath, line);
+    }
+
+    @Override
+    public void sendLaser(String vPath, int x, int y) {
+        collab.sendLaser(vPath, x, y);
+    }
+
+    @Override
+    public void sendFileCreate(String path, boolean isDir) {
+        collab.sendFileCreate(path, isDir);
+    }
+
+    @Override
+    public void sendFileDelete(String path) {
+        collab.sendFileDelete(path);
+    }
+
+    @Override
+    public void sendFileRename(String oldPath, String newPath) {
+        collab.sendFileRename(oldPath, newPath);
+    }
+
+    // --- CollabCallbacks Implementation (Infra -> Controller) ---
 
     @Override
     public void applyRemoteEdit(String path, String text) {
@@ -162,14 +240,14 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     }
 
     @Override
-    public void onRoleInfo(String nick, String role) {
+    public void onRoleInfo(String nick, String roleString) {
         SwingUtilities.invokeLater(() -> {
+            Role role = Role.fromString(roleString);
             userRoles.put(nick, role);
             if (Objects.equals(nick, collab.getNickname())) {
                 updateThemeForRole(role);
             }
             log("[ROLE] " + nick + " = " + role);
-            // Refresh cursors if needed
         });
     }
 
@@ -186,10 +264,10 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
     }
 
     private Color colorForNick(String nick) {
-        String role = userRoles.get(nick);
-        if ("Professor".equals(role))
+        Role role = userRoles.get(nick);
+        if (role == Role.PROFESSOR)
             return new Color(255, 105, 180, 110);
-        if ("Student".equals(role))
+        if (role == Role.STUDENT)
             return new Color(0, 255, 0, 110);
         return userColors.computeIfAbsent(nick, n -> {
             Color[] p = { new Color(66, 133, 244), new Color(52, 168, 83), new Color(234, 67, 53),
@@ -199,16 +277,14 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         });
     }
 
-    private void updateThemeForRole(String role) {
+    private void updateThemeForRole(Role role) {
         Color themeColor;
         String titleSuffix;
-        boolean isProf = "Professor".equals(role);
-        boolean isStud = "Student".equals(role);
 
-        if (isProf) {
+        if (role == Role.PROFESSOR) {
             themeColor = new Color(255, 182, 193);
             titleSuffix = " [PROFESSOR]";
-        } else if (isStud) {
+        } else if (role == Role.STUDENT) {
             themeColor = new Color(144, 238, 144);
             titleSuffix = " [STUDENT]";
         } else {
@@ -216,9 +292,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             titleSuffix = "";
         }
 
-        toolBarManager.getBtnFollowMe().setVisible(isProf);
-        toolBarManager.getBtnLaser().setVisible(isProf);
-        toolBarManager.getBtnAttendance().setVisible(isProf);
+        toolBarManager.getBtnFollowMe().setVisible(role == Role.PROFESSOR);
+        toolBarManager.getBtnLaser().setVisible(role == Role.PROFESSOR);
+        toolBarManager.getBtnAttendance().setVisible(role == Role.PROFESSOR);
 
         setTitle("Mini IDE (Java) - " + (collab.getNickname() != null ? collab.getNickname() : "Guest") + titleSuffix);
         statusPanel.setBackground(themeColor);
@@ -228,7 +304,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
         repaint();
     }
 
-    // --- Entry ---
+    // --- Entry Point ---
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
@@ -239,28 +315,4 @@ public class CollabIDE extends JFrame implements CollabCallbacks {
             new CollabIDE().setVisible(true);
         });
     }
-
-    // For simplicity, Attendance Dialog class logic is kept as is?
-    // Wait, the original had inner class or separate file?
-    // It seems AttendanceDialog was a separate file in
-    // ide/client/CollabIDE$AttendanceDialog.class or separate.
-    // Ideally it is separate.
-    // If it was inner class in CollabIDE, I should ensure it exists.
-    // The previous `ls` showed `CollabIDE$AttendanceDialog.class` in `out`,
-    // suggesting it was an inner class.
-    // I need to make sure I don't break it if it's used.
-    // But since I am refactoring, I should probably move it to a separate file if I
-    // can, or inner class here.
-    // To keep it simple and compiling, I will ignore detailed implementation of
-    // AttendanceDialog for this step unless necessary.
-    // Actually, I'll extract it to a class `ide.ui.AttendanceDialog` if not already
-    // there, OR include a stub here.
-    // Let's create `ide/ui/AttendanceDialog.java` to make it clean if it's missing.
-    // But wait, the user didn't ask for AttendanceDialog refactor specifically,
-    // just general.
-    // If I leave it out, it won't compile.
-    // The original `CollabIDE.java` had: `private AttendanceDialog
-    // attendanceDialog;` and `class AttendanceDialog extends JDialog`.
-    // I should create `ide/client/AttendanceDialog.java` or
-    // `ide/ui/AttendanceDialog.java`.
 }
