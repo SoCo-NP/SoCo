@@ -15,25 +15,45 @@ import java.util.Optional;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
+/**
+ * 에디터 탭(Tab)들을 관리하는 UI 매니저 클래스.
+ * <p>
+ * 여러 개의 파일을 탭 형태로 열고 닫는 기능을 제공하며,
+ * 각 탭의 편집 이벤트(키 입력 등)를 감지하여 컨트롤러에게 전달한다.
+ * 또한, 원격에서 수신된 편집/커서/뷰포트 이벤트를 해당 탭에 반영한다.
+ * </p>
+ */
 public class TabManager {
-    private final JTabbedPane editorTabs = new JTabbedPane();
-    private final Map<String, EditorTab> tabMap = new HashMap<>(); // Virtual Path -> Tab
-    private final CollabActions collab;
-    private final BooleanSupplier isKeystrokeMode;
-    private final Consumer<EditorTab> onTabUpdated;
 
-    // Follow Me
+    // UI 컴포넌트
+    private final JTabbedPane editorTabs = new JTabbedPane();
+
+    // 상태 관리
+    private final Map<String, EditorTab> tabMap = new HashMap<>(); // 가상 경로 -> 탭 매핑
+    private final CollabActions collab; // 컨트롤러 인터페이스
+    private final BooleanSupplier isKeystrokeMode; // 실시간 모드 여부 확인용
+    private final Consumer<EditorTab> onTabUpdated; // 탭 상태 변경 시 콜백
+
+    // 기능: Follow Me (화면 동기화)
     private boolean followMeActive = false;
     private final Timer viewportDebounce;
 
-    // Laser
+    // 기능: 레이저 포인터
     private boolean laserActive = false;
 
+    /**
+     * TabManager 생성자.
+     *
+     * @param collab          컨트롤러 인터페이스 (네트워크 요청용)
+     * @param isKeystrokeMode 실시간 전송 모드 여부를 반환하는 공급자
+     * @param onTabUpdated    탭 상태(제목 등)가 변경되었을 때 호출될 콜백
+     */
     public TabManager(CollabActions collab, BooleanSupplier isKeystrokeMode, Consumer<EditorTab> onTabUpdated) {
         this.collab = collab;
         this.isKeystrokeMode = isKeystrokeMode;
         this.onTabUpdated = onTabUpdated;
 
+        // 탭 변경 리스너: 탭을 바꿀 때마다 최신 내용을 서버로 전송 (동기화 보장)
         editorTabs.addChangeListener(e -> {
             getActiveEditor().ifPresent(tab -> {
                 if (collab.isConnected())
@@ -44,6 +64,7 @@ public class TabManager {
             }
         });
 
+        // 뷰포트 전송 디바운스 타이머 (너무 잦은 전송 방지)
         viewportDebounce = new Timer(100, e -> {
             if (followMeActive && collab.isConnected())
                 sendViewportNow();
@@ -51,10 +72,20 @@ public class TabManager {
         viewportDebounce.setRepeats(false);
     }
 
+    /**
+     * 탭 패널 컴포넌트를 반환한다.
+     *
+     * @return JTabbedPane 인스턴스
+     */
     public JComponent getComponent() {
         return editorTabs;
     }
 
+    /**
+     * 로컬 파일을 열어 새 탭을 생성하거나, 이미 열려있다면 해당 탭을 활성화한다.
+     *
+     * @param file 열고자 하는 파일
+     */
     public void openFile(File file) {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
             EditorTab tab = getTabAt(i);
@@ -71,10 +102,20 @@ public class TabManager {
         }
     }
 
+    /**
+     * 제목 없는 새 문서를 연다.
+     */
     public void openUntitled() {
         addTab(null, "", null);
     }
 
+    /**
+     * 내부적으로 탭을 추가하고 초기화한다.
+     *
+     * @param file          파일 객체 (없으면 null)
+     * @param text          초기 텍스트 내용
+     * @param vPathOverride 가상 경로 강제 지정 (원격 파일 오픈 시 사용)
+     */
     private void addTab(File file, String text, String vPathOverride) {
         EditorTab tab = new EditorTab(file, text, vPathOverride, collab, isKeystrokeMode, onTabUpdated);
         JScrollPane sp = new JScrollPane(tab);
@@ -93,12 +134,17 @@ public class TabManager {
         onTabUpdated.accept(tab);
     }
 
-    // --- Tab Access & Management ---
+    // --- 탭 접근 및 관리 ---
 
     private EditorTab getTabAt(int index) {
         return (EditorTab) ((JScrollPane) editorTabs.getComponentAt(index)).getViewport().getView();
     }
 
+    /**
+     * 현재 활성화된 에디터 탭을 반환한다.
+     *
+     * @return 활성 탭 (없으면 empty)
+     */
     public Optional<EditorTab> getActiveEditor() {
         int idx = editorTabs.getSelectedIndex();
         if (idx < 0)
@@ -106,15 +152,28 @@ public class TabManager {
         return Optional.of(getTabAt(idx));
     }
 
+    /**
+     * 가상 경로로 열려있는 탭을 찾는다.
+     *
+     * @param path 파일의 가상 경로
+     * @return 해당 탭 (없으면 null)
+     */
     public EditorTab findTabByPath(String path) {
         return tabMap.get(path);
     }
 
+    /**
+     * 원격에서 수신된 편집 내용을 반영한다.
+     * 해당 파일이 열려있지 않다면 새로 연다.
+     *
+     * @param path 파일 경로
+     * @param text 변경된 전체 텍스트
+     */
     public void applyRemoteEdit(String path, String text) {
         SwingUtilities.invokeLater(() -> {
             EditorTab tab = findTabByPath(path);
             if (tab == null) {
-                // Open new tab if remote sends edit for unknown file
+                // 원격에서 모르는 파일에 대한 편집이 오면 새 탭으로 엽니다.
                 File f = (path.startsWith("untitled:")) ? null : new File(path);
                 addTab(f, text, (f == null) ? path : null);
             } else {
@@ -123,11 +182,14 @@ public class TabManager {
         });
     }
 
+    /**
+     * 현재 활성화된 탭을 닫는다.
+     *
+     * @param onDirtyDiskSave     저장되지 않은 디스크 파일일 경우 실행할 콜백
+     * @param onDirtyUntitledSave 저장되지 않은 새 문서일 경우 실행할 콜백
+     */
     public void closeActiveTab(Runnable onDirtyDiskSave, Runnable onDirtyUntitledSave) {
-        // Logic simplified: Just remove if simple. For full logic (save confirm),
-        // ideally CollabIDE delegates to here.
-        // For refactoring, let's keep it simple or port the confirm logic.
-        // For now, simple remove.
+        // 현재는 단순 닫기만 구현 (저장 확인 로직 생략)
         int idx = editorTabs.getSelectedIndex();
         if (idx >= 0) {
             EditorTab t = getTabAt(idx);
@@ -136,6 +198,11 @@ public class TabManager {
         }
     }
 
+    /**
+     * 특정 경로 하위에 있는 모든 탭을 닫는다. (폴더 삭제 시 사용)
+     *
+     * @param basePath 기준 경로
+     */
     public void closeTabsUnder(String basePath) {
         for (int i = editorTabs.getTabCount() - 1; i >= 0; i--) {
             EditorTab t = getTabAt(i);
@@ -149,6 +216,12 @@ public class TabManager {
         }
     }
 
+    /**
+     * 파일 이름 변경 시 열려있는 탭 정보를 갱신한다.
+     *
+     * @param oldPath 변경 전 경로
+     * @param newPath 변경 후 경로
+     */
     public void updateTabsOnRename(String oldPath, String newPath) {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
             EditorTab t = getTabAt(i);
@@ -161,6 +234,11 @@ public class TabManager {
         }
     }
 
+    /**
+     * 탭의 제목(파일명, 수정 여부 표시)을 갱신한다.
+     *
+     * @param tab 대상 탭
+     */
     public void updateTabTitle(EditorTab tab) {
         for (int i = 0; i < editorTabs.getTabCount(); i++) {
             if (getTabAt(i) == tab) {
@@ -179,14 +257,24 @@ public class TabManager {
         return editorTabs.getTabCount();
     }
 
-    // --- Sync Features ---
+    // --- 동기화 기능 (Follow Me, Laser) ---
 
+    /**
+     * Follow Me (화면 동기화) 기능을 활성화/비활성화한다.
+     *
+     * @param active true면 활성화
+     */
     public void setFollowMe(boolean active) {
         this.followMeActive = active;
         if (active)
             sendViewportNow();
     }
 
+    /**
+     * 레이저 포인터 기능을 활성화/비활성화한다.
+     *
+     * @param active true면 활성화
+     */
     public void setLaser(boolean active) {
         this.laserActive = active;
         updateLaserState();
@@ -235,7 +323,7 @@ public class TabManager {
         if (!laserActive && collab.isConnected()) {
             getActiveEditor().ifPresent(tab -> collab.sendLaser(tab.getVirtualPath(), -1, -1));
         }
-        // Cursor update
+        // 커서 모양 변경 (십자선)
         getActiveEditor().ifPresent(tab -> {
             if (laserActive) {
                 tab.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
@@ -245,12 +333,19 @@ public class TabManager {
         });
     }
 
-    // Remote Viewport
+    // --- 원격 뷰포트/레이저 반영 ---
+
+    /**
+     * 원격에서 수신된 뷰포트 위치(스크롤)를 반영한다.
+     *
+     * @param path 파일 경로
+     * @param line 이동할 줄 번호
+     */
     public void applyRemoteViewport(String path, int line) {
         SwingUtilities.invokeLater(() -> {
             EditorTab tab = findTabByPath(path);
             if (tab == null) {
-                // If not open, ignore or open? Original logic: opened it.
+                // 파일이 안 열려있으면 엽니다.
                 File f = new File(path);
                 if (f.exists() && f.isFile()) {
                     openFile(f);
@@ -272,6 +367,13 @@ public class TabManager {
         });
     }
 
+    /**
+     * 원격에서 수신된 레이저 포인터 위치를 반영한다.
+     *
+     * @param path 파일 경로
+     * @param x    X 좌표
+     * @param y    Y 좌표
+     */
     public void applyRemoteLaser(String path, int x, int y) {
         SwingUtilities.invokeLater(() -> {
             EditorTab tab = findTabByPath(path);
