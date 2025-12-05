@@ -21,6 +21,10 @@ public class Protocol {
     /** 서버 <-> 클라이언트: 역할 정보 교환 (ROLE_INFO|Nickname|Role) */
     public static final String ROLE_INFO = "ROLE_INFO";
 
+    // 질문 관련 (Student -> Professor via Server)
+    /** 학생 -> 서버 -> 교수자: 질문 전송 (QUESTION|StudentNick|Base64QuestionText) */
+    public static final String QUESTION = "QUESTION";
+
     // 에디터 액션 (Editor Actions)
     /** 양방향: 텍스트 편집 (EDIT|Path|Base64Content) */
     public static final String EDIT = "EDIT";

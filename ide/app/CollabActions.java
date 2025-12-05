@@ -124,4 +124,16 @@ public interface CollabActions {
      * @return 접속 중인 학생 닉네임 집합
      */
     java.util.Set<String> getConnectedStudents();
+
+    /**
+     * 교수자에게 질문을 전송한다 (학생 전용).
+     *
+     * @param questionText 질문 내용
+     */
+    void sendQuestion(String questionText);
+
+    /**
+     * 질문 다이얼로그를 표시한다 (교수자 전용).
+     */
+    void showQuestionDialog();
 }

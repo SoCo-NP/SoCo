@@ -28,9 +28,11 @@ public class ToolBarManager {
     private final FileTreeManager fileTreeManager;
 
     // 상태 토글 버튼 (외부에서 상태 업데이트 필요)
-    private final JToggleButton btnFollowMe = new JToggleButton("Follow Me");
-    private final JToggleButton btnLaser = new JToggleButton("Laser");
-    private final JToggleButton btnAttendance = new JToggleButton("Attendance");
+    private final JToggleButton btnFollowMe = new JToggleButton("🌟 FollowMe");
+    private final JToggleButton btnLaser = new JToggleButton("⚡ Laser");
+    private final JButton btnAttendance = new JButton("📋 Attendance");
+    private final JButton btnQuestionDialog = new JButton("💬 학생질문"); // 교수자 전용
+    private final JButton btnQuestion = new JButton("💬 질문하기"); // 학생 전용
 
     // 연결 다이얼로그 실행 콜백
     private final Runnable promptConnectAction;
@@ -82,6 +84,29 @@ public class ToolBarManager {
             dialog.setVisible(true);
         });
 
+        btnQuestionDialog.setVisible(false); // 초기에는 숨김
+        btnQuestionDialog.addActionListener(e -> {
+            collab.showQuestionDialog();
+        });
+
+        btnQuestion.setVisible(false); // 초기에는 숨김
+        btnQuestion.addActionListener(e -> {
+            String question = JOptionPane.showInputDialog(
+                    parentFrame,
+                    "교수자에게 질문할 내용을 입력하세요:",
+                    "질문하기",
+                    JOptionPane.QUESTION_MESSAGE);
+
+            if (question != null && !question.trim().isEmpty()) {
+                collab.sendQuestion(question.trim());
+                JOptionPane.showMessageDialog(
+                        parentFrame,
+                        "질문이 전송되었습니다!",
+                        "전송 완료",
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
         toolBar.add(btnOpen);
         toolBar.add(btnSave);
         toolBar.addSeparator();
@@ -90,6 +115,8 @@ public class ToolBarManager {
         toolBar.add(btnFollowMe);
         toolBar.add(btnLaser);
         toolBar.add(btnAttendance);
+        toolBar.add(btnQuestionDialog);
+        toolBar.add(btnQuestion);
 
         // --- 메뉴바 (MenuBar) 구성 ---
         JMenu file = new JMenu("File");
@@ -275,7 +302,18 @@ public class ToolBarManager {
         return btnLaser;
     }
 
-    public JToggleButton getBtnAttendance() {
+    public JButton getBtnAttendance() {
         return btnAttendance;
+    }
+
+    /**
+     * Role에 따라 버튼 표시/숨김을 업데이트한다.
+     *
+     * @param isProfessor 교수자 여부
+     */
+    public void updateRoleUI(boolean isProfessor) {
+        btnAttendance.setVisible(isProfessor);
+        btnQuestionDialog.setVisible(isProfessor); // 교수자일 때만 표시
+        btnQuestion.setVisible(!isProfessor); // 학생일 때만 표시
     }
 }

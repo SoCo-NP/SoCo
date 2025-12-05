@@ -35,6 +35,14 @@ public interface CollabCallbacks {
     void onRoleInfo(String nick, String role);
 
     /**
+     * 학생으로부터 질문이 도착했을 때 호출된다 (교수자 전용).
+     *
+     * @param studentNick  질문한 학생의 닉네임
+     * @param questionText 질문 내용
+     */
+    void onQuestion(String studentNick, String questionText);
+
+    /**
      * 원격 사용자의 뷰포트(스크롤) 위치를 반영한다.
      * (Follow Me 기능 등에서 사용)
      *

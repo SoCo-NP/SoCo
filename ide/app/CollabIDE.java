@@ -6,6 +6,7 @@ import ide.ui.EditorTab;
 import ide.ui.FileTreeManager;
 import ide.ui.TabManager;
 import ide.ui.ToolBarManager;
+import ide.ui.QuestionDialog;
 import ide.ui.Theme;
 import ide.domain.Role;
 
@@ -38,6 +39,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
     private final JTextArea console = new JTextArea();
     private final JLabel statusLabel = new JLabel("Offline");
     private final JPanel statusPanel = new JPanel(new BorderLayout());
+    private QuestionDialog questionDialog; // 교수자 전용 질문 다이얼로그
 
     /**
      * CollabIDE 생성자.
@@ -79,18 +81,22 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
                 tabManager.getComponent());
         h.setResizeWeight(0.22);
 
-        JScrollPane consoleScroll = new JScrollPane(console);
         console.setEditable(false);
         console.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
-        consoleScroll.setPreferredSize(new Dimension(0, 180));
+        JScrollPane consoleScrollPane = new JScrollPane(console);
+        consoleScrollPane.setPreferredSize(new Dimension(0, 180));
 
-        JSplitPane v = new JSplitPane(JSplitPane.VERTICAL_SPLIT, h, consoleScroll);
-        v.setResizeWeight(0.8);
+        JSplitPane mainSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                h, consoleScrollPane);
+        mainSplit.setResizeWeight(0.8);
+
+        // 교수자 전용 질문 다이얼로그 초기화 (필요할 때만 생성)
+        questionDialog = new QuestionDialog(this);
 
         statusPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
         statusPanel.add(statusLabel, BorderLayout.WEST);
 
-        getContentPane().add(v, BorderLayout.CENTER);
+        getContentPane().add(mainSplit, BorderLayout.CENTER);
         getContentPane().add(statusPanel, BorderLayout.SOUTH);
     }
 
@@ -236,6 +242,11 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
         return students;
     }
 
+    @Override
+    public void sendQuestion(String questionText) {
+        collab.sendQuestion(questionText);
+    }
+
     // --- CollabCallbacks 구현 (Network -> Controller) ---
 
     @Override
@@ -275,9 +286,29 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
 
             if (Objects.equals(nick, collab.getNickname())) {
                 updateThemeForRole(role);
+
+                // Role에 따라 툴바 버튼 표시/숨김
+                toolBarManager.updateRoleUI(role == Role.PROFESSOR);
             }
             log("[참여자 정보] " + nick + " = " + role);
         });
+    }
+
+    @Override
+    public void onQuestion(String studentNick, String questionText) {
+        System.out.println("[CollabIDE] Question from " + studentNick + ": " + questionText);
+        if (questionDialog != null) {
+            questionDialog.addQuestion(studentNick, questionText);
+        }
+    }
+
+    /**
+     * 질문 다이얼로그를 표시한다 (교수자 전용).
+     */
+    public void showQuestionDialog() {
+        if (questionDialog != null) {
+            questionDialog.setVisible(true);
+        }
     }
 
     // --- 편의 메소드 ---

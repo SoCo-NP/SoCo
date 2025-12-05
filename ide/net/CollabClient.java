@@ -146,6 +146,16 @@ public class CollabClient {
                     } else {
                         System.out.println("[CLIENT] Invalid ROLE_INFO format: " + msg);
                     }
+                } else if (msg.startsWith(Protocol.QUESTION + Protocol.SEPARATOR)) {
+                    System.out.println("[CLIENT] Received QUESTION: " + msg);
+                    String[] p = msg.split(Protocol.DELIMITER, 3);
+                    if (p.length == 3) {
+                        String studentNick = p[1];
+                        String questionText = new String(
+                                Base64.getDecoder().decode(p[2]), StandardCharsets.UTF_8);
+                        System.out.println("[CLIENT] Question from " + studentNick + ": " + questionText);
+                        ui.onQuestion(studentNick, questionText);
+                    }
                 } else if (msg.startsWith(Protocol.FILE_CREATE + Protocol.SEPARATOR) ||
                         msg.startsWith(Protocol.FILE_DELETE + Protocol.SEPARATOR) ||
                         msg.startsWith(Protocol.FILE_RENAME + Protocol.SEPARATOR)) {
@@ -246,6 +256,21 @@ public class CollabClient {
         if (connected)
             sendLine(Protocol.FILE_RENAME + Protocol.SEPARATOR + oldPath + Protocol.SEPARATOR + newPath
                     + Protocol.SEPARATOR + nickname);
+    }
+
+    /**
+     * 질문을 서버로 전송한다 (학생 전용).
+     *
+     * @param questionText 질문 내용
+     */
+    public void sendQuestion(String questionText) {
+        if (!connected)
+            return;
+        String encoded = Base64.getEncoder().encodeToString(
+                questionText.getBytes(StandardCharsets.UTF_8));
+        sendLine(Protocol.QUESTION + Protocol.SEPARATOR + nickname +
+                Protocol.SEPARATOR + encoded);
+        System.out.println("[CLIENT] Sent question: " + questionText);
     }
 
     /**

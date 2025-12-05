@@ -105,6 +105,9 @@ public class CollabServer {
                         handleCompileReq(line);
                     } else if (line.startsWith(Protocol.COMPILE_RELEASE + Protocol.SEPARATOR)) {
                         handleCompileRelease(line);
+                    } else if (line.startsWith(Protocol.QUESTION + Protocol.SEPARATOR)) {
+                        System.out.println("[SERVER Client] Received QUESTION from " + nick);
+                        handleQuestion(line);
                     }
                 }
                 System.out.println("[SERVER Client] readLine() returned null, connection closed");
@@ -205,6 +208,22 @@ public class CollabServer {
                     compileLocks.remove(fpath);
                     broadcast(Protocol.COMPILE_RELEASE + Protocol.SEPARATOR + fpath + Protocol.SEPARATOR
                             + reqNick, this);
+                }
+            }
+        }
+
+        /**
+         * 학생의 질문을 교수자에게 전달한다.
+         */
+        private void handleQuestion(String line) {
+            System.out.println("[SERVER] Routing question to professors: " + line);
+            synchronized (clients) {
+                for (Client c : clients) {
+                    // Professor role인 클라이언트에게만 전송
+                    if ("Professor".equals(c.role)) {
+                        c.send(line);
+                        System.out.println("[SERVER] Question sent to: " + c.nick);
+                    }
                 }
             }
         }
