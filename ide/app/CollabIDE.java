@@ -7,7 +7,6 @@ import ide.ui.FileTreeManager;
 import ide.ui.TabManager;
 import ide.ui.ToolBarManager;
 import ide.ui.QuestionDialog;
-import ide.ui.Theme;
 import ide.domain.Role;
 
 import javax.swing.*;
@@ -18,48 +17,56 @@ import java.util.*;
 
 /**
  * 애플리케이션의 메인 컨트롤러 클래스.
- * UI 계층, 네트워크 계층, 도메인 계층 간의 상호작용을 조정한다.
+ * 
+ * 매니저 클래스들을 조율하고, CollabCallbacks/CollabActions 인터페이스를 구현하여
+ * UI 계층과 네트워크 계층 간의 중재 역할을 수행한다.
  */
 public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions {
 
-    // UI 매니저 (View)
+    // 매니저 클래스들
+    private final ConnectionManager connectionMgr;
+    private final UserSessionManager sessionMgr;
+    private final UICoordinator uiCoordinator;
+
+    // UI 매니저
     private final TabManager tabManager;
     private final FileTreeManager fileTreeManager;
     private final ToolBarManager toolBarManager;
 
-    // 네트워크 클라이언트 (Infrastructure)
-    private final CollabClient collab;
-
-    // 애플리케이션 상태
-    private volatile boolean keystrokeMode = false;
-    private final Map<String, Color> userColors = new HashMap<>();
-    private final Map<String, Role> userRoles = new HashMap<>();
-
-    // Swing 컴포넌트
+    // UI 컴포넌트
     private final JTextArea console = new JTextArea();
     private final JLabel statusLabel = new JLabel("Offline");
     private final JPanel statusPanel = new JPanel(new BorderLayout());
-    private QuestionDialog questionDialog; // 교수자 전용 질문 다이얼로그
+    private QuestionDialog questionDialog;
+
+    // 애플리케이션 상태
+    private volatile boolean keystrokeMode = false;
 
     /**
      * CollabIDE 생성자.
-     * 네트워크, UI 매니저, 화면 레이아웃을 초기화한다.
+     * 매니저 클래스들과 UI를 초기화한다.
      */
     public CollabIDE() {
         super("SoCo IDE");
 
-        // 1. 네트워크 초기화
-        collab = new CollabClient(this);
+        // 1. 네트워크 및 매니저 초기화
+        CollabClient client = new CollabClient(this);
+        this.connectionMgr = new ConnectionManager(client);
+        this.sessionMgr = new UserSessionManager();
 
         // 2. UI 매니저 초기화
-        tabManager = new TabManager(this, () -> keystrokeMode, this::onTabUpdated);
-        fileTreeManager = new FileTreeManager(this, this, tabManager);
-        toolBarManager = new ToolBarManager(this, this, tabManager, fileTreeManager, this::promptConnect);
+        this.tabManager = new TabManager(this, () -> keystrokeMode, this::onTabUpdated);
+        this.fileTreeManager = new FileTreeManager(this, this, tabManager);
+        this.toolBarManager = new ToolBarManager(this, this, tabManager, fileTreeManager,
+                () -> connectionMgr.promptConnect(this));
 
-        // 3. UI 구성
+        // 3. UI 조정자 초기화
+        this.uiCoordinator = new UICoordinator(this, tabManager, toolBarManager, console, statusLabel);
+
+        // 4. UI 구성
         setupUI();
 
-        // 4. 윈도우 설정
+        // 5. 윈도우 설정
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setMinimumSize(new Dimension(1180, 780));
         setLocationRelativeTo(null);
@@ -69,15 +76,23 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
             public void windowClosing(WindowEvent e) {
                 disconnect();
                 dispose();
+                System.exit(0);
             }
         });
     }
 
+    /**
+     * UI 레이아웃을 구성한다.
+     */
     private void setupUI() {
         setJMenuBar(toolBarManager.getMenuBar());
-        add(toolBarManager.getToolBar(), BorderLayout.NORTH);
+        getContentPane().add(toolBarManager.getToolBar(), BorderLayout.NORTH);
 
-        JSplitPane h = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, fileTreeManager.getComponent(),
+        JScrollPane treeScroll = new JScrollPane(fileTreeManager.getComponent());
+        treeScroll.setPreferredSize(new Dimension(280, 0));
+
+        JSplitPane h = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                treeScroll,
                 tabManager.getComponent());
         h.setResizeWeight(0.22);
 
@@ -90,7 +105,7 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
                 h, consoleScrollPane);
         mainSplit.setResizeWeight(0.8);
 
-        // 교수자 전용 질문 다이얼로그 초기화 (필요할 때만 생성)
+        // 질문 다이얼로그 초기화
         questionDialog = new QuestionDialog(this);
 
         statusPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
@@ -100,151 +115,114 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
         getContentPane().add(statusPanel, BorderLayout.SOUTH);
     }
 
-    // --- 컨트롤러 로직 ---
-
     /**
-     * 탭의 상태가 변경되었을 때 상태바를 업데이트한다.
+     * 탭 상태가 변경되었을 때 상태바를 업데이트한다.
      */
     private void onTabUpdated(EditorTab tab) {
         String path = tab.getVirtualPath();
         String dirty = tab.isDirty() ? "[수정됨]" : "";
         statusLabel.setText(String.format("%s  %s  Ln %d, Col %d  |  %s  %s",
                 path, dirty, tab.getCaretLine(), tab.getCaretCol(),
-                collab.isConnected() ? "Online" : "Offline",
+                connectionMgr.isConnected() ? "Online" : "Offline",
                 keystrokeMode ? "(실시간)" : "(200ms)"));
         tabManager.updateTabTitle(tab);
     }
 
-    /**
-     * 서버 접속 다이얼로그를 표시한다.
-     */
-    private void promptConnect() {
-        JPanel p = new JPanel(new GridLayout(0, 2, 6, 6));
-        JTextField host = new JTextField("127.0.0.1");
-        JTextField port = new JTextField("6000");
-        JTextField nick = new JTextField("user" + (int) (Math.random() * 100));
-        JComboBox<String> role = new JComboBox<>(new String[] { "Student", "Professor" });
-        p.add(new JLabel("Host:"));
-        p.add(host);
-        p.add(new JLabel("Port:"));
-        p.add(port);
-        p.add(new JLabel("Nickname:"));
-        p.add(nick);
-        p.add(new JLabel("Role:"));
-        p.add(role);
-
-        int r = JOptionPane.showConfirmDialog(this, p, "서버 연결", JOptionPane.OK_CANCEL_OPTION);
-        if (r == JOptionPane.OK_OPTION) {
-            try {
-                String selectedRole = (String) role.getSelectedItem();
-                String nickname = nick.getText().trim();
-
-                connect(host.getText().trim(), Integer.parseInt(port.getText().trim()), nickname, selectedRole);
-
-            } catch (Exception ex) {
-                showError("연결 실패: " + ex.getMessage());
-            }
-        }
-    }
-
     // --- CollabActions 구현 (UI -> Controller) ---
 
-    @Override
     public void connect(String host, int port, String nickname, String roleStr) {
         try {
-            collab.connect(host, port, nickname, roleStr);
-            Role role = Role.fromString(roleStr);
-            userRoles.put(nickname, role);
-
-            statusLabel.setText("연결됨");
-            log("서버 연결 성공 (" + host + ":" + port + ") - 역할: " + role);
-            updateThemeForRole(role);
+            connectionMgr.connect(host, port, nickname, roleStr);
+            uiCoordinator.log("서버 연결됨: " + host + ":" + port);
         } catch (Exception e) {
-            showError(e.getMessage());
+            uiCoordinator.showError("연결 실패: " + e.getMessage());
         }
     }
 
     @Override
     public void disconnect() {
-        collab.disconnect();
-        statusLabel.setText("오프라인");
-        log("연결이 종료되었습니다.");
+        if (connectionMgr.isConnected()) {
+            connectionMgr.disconnect();
+            sessionMgr.clear();
+            uiCoordinator.log("서버 연결 해제");
+        }
     }
 
     @Override
     public boolean isConnected() {
-        return collab.isConnected();
+        return connectionMgr.isConnected();
     }
 
     @Override
     public String getNickname() {
-        return collab.getNickname();
+        return connectionMgr.getNickname();
     }
 
     @Override
     public void setFollowMe(boolean active) {
-        toolBarManager.getBtnFollowMe().setSelected(active);
+        keystrokeMode = active;
     }
 
     @Override
     public void setLaser(boolean active) {
-        toolBarManager.getBtnLaser().setSelected(active);
+        tabManager.setLaser(active);
     }
 
     @Override
     public void sendSnapshot(String vPath, String text) {
-        collab.sendSnapshot(vPath, text);
+        connectionMgr.getClient().sendSnapshot(vPath, text);
     }
 
     @Override
     public void sendCursor(String vPath, int dot, int mark) {
-        collab.sendCursor(vPath, dot, mark);
+        connectionMgr.getClient().sendCursor(vPath, dot, mark);
     }
 
     @Override
     public void sendViewport(String vPath, int line) {
-        collab.sendViewport(vPath, line);
+        connectionMgr.getClient().sendViewport(vPath, line);
     }
 
     @Override
     public void sendLaser(String vPath, int x, int y) {
-        collab.sendLaser(vPath, x, y);
+        connectionMgr.getClient().sendLaser(vPath, x, y);
     }
 
     @Override
     public void sendFileCreate(String path, boolean isDir) {
-        collab.sendFileCreate(path, isDir);
+        connectionMgr.getClient().sendFileCreate(path, isDir);
     }
 
     @Override
     public void sendFileDelete(String path) {
-        collab.sendFileDelete(path);
+        connectionMgr.getClient().sendFileDelete(path);
     }
 
     @Override
     public void sendFileRename(String oldPath, String newPath) {
-        collab.sendFileRename(oldPath, newPath);
+        connectionMgr.getClient().sendFileRename(oldPath, newPath);
     }
 
     @Override
-    public java.util.Set<String> getConnectedUsers() {
-        return new java.util.HashSet<>(userRoles.keySet());
+    public Set<String> getConnectedUsers() {
+        return sessionMgr.getConnectedUsers();
     }
 
     @Override
-    public java.util.Set<String> getConnectedStudents() {
-        java.util.Set<String> students = new java.util.HashSet<>();
-        for (java.util.Map.Entry<String, ide.domain.Role> entry : userRoles.entrySet()) {
-            if (entry.getValue() == ide.domain.Role.STUDENT) {
-                students.add(entry.getKey());
-            }
-        }
-        return students;
+    public Set<String> getConnectedStudents() {
+        return sessionMgr.getConnectedStudents();
     }
 
     @Override
     public void sendQuestion(String questionText) {
-        collab.sendQuestion(questionText);
+        connectionMgr.getClient().sendQuestion(questionText);
+    }
+
+    @Override
+    public void showQuestionDialog() {
+        if (questionDialog != null) {
+            questionDialog.setVisible(true);
+        }
     }
 
     // --- CollabCallbacks 구현 (Network -> Controller) ---
@@ -252,17 +230,13 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
     @Override
     public void applyRemoteEdit(String path, String text) {
         tabManager.applyRemoteEdit(path, text);
-        log("[원격 편집] " + path);
     }
 
     @Override
     public void applyRemoteCursor(String path, String nick, int dot, int mark) {
-        SwingUtilities.invokeLater(() -> {
-            EditorTab tab = tabManager.findTabByPath(path);
-            if (tab != null) {
-                tab.updateRemoteCursor(nick, dot, mark, colorForNick(nick));
-            }
-        });
+        // TabManager doesn't currently expose remote cursor API
+        // Color color = sessionMgr.getColorForNick(nick);
+        // TODO: Implement when TabManager adds remote cursor support
     }
 
     @Override
@@ -279,18 +253,17 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
     public void onRoleInfo(String nick, String roleString) {
         SwingUtilities.invokeLater(() -> {
             Role role = Role.fromString(roleString);
-            userRoles.put(nick, role);
+            sessionMgr.addUser(nick, role);
 
             System.out.println("[CollabIDE] ROLE_INFO received: " + nick + " -> " + role);
-            System.out.println("[CollabIDE] Current userRoles: " + userRoles);
+            System.out.println("[CollabIDE] Current userRoles: " + sessionMgr.getConnectedUsers());
 
-            if (Objects.equals(nick, collab.getNickname())) {
-                updateThemeForRole(role);
-
-                // Role에 따라 툴바 버튼 표시/숨김
+            if (Objects.equals(nick, connectionMgr.getNickname())) {
+                uiCoordinator.updateThemeForRole(role);
                 toolBarManager.updateRoleUI(role == Role.PROFESSOR);
             }
-            log("[참여자 정보] " + nick + " = " + role);
+
+            uiCoordinator.log("[참여자 정보] " + nick + " = " + role);
         });
     }
 
@@ -302,75 +275,17 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
         }
     }
 
+    // --- 메인 메소드 ---
+
     /**
-     * 질문 다이얼로그를 표시한다 (교수자 전용).
+     * 애플리케이션 진입점.
      */
-    public void showQuestionDialog() {
-        if (questionDialog != null) {
-            questionDialog.setVisible(true);
-        }
-    }
-
-    // --- 편의 메소드 ---
-
-    private void log(String msg) {
-        console.append(msg + "\n");
-        console.setCaretPosition(console.getDocument().getLength());
-    }
-
-    private void showError(String msg) {
-        JOptionPane.showMessageDialog(this, msg, "오류", JOptionPane.ERROR_MESSAGE);
-        log("오류: " + msg);
-    }
-
-    private Color colorForNick(String nick) {
-        Role role = userRoles.get(nick);
-        if (role == Role.PROFESSOR)
-            return new Color(255, 105, 180, 110);
-        if (role == Role.STUDENT)
-            return new Color(0, 255, 0, 110);
-        return userColors.computeIfAbsent(nick, n -> {
-            Color[] p = { new Color(66, 133, 244), new Color(52, 168, 83), new Color(234, 67, 53),
-                    new Color(251, 188, 5) };
-            Color c = p[Math.abs(n.hashCode()) % p.length];
-            return new Color(c.getRed(), c.getGreen(), c.getBlue(), 110);
-        });
-    }
-
-    private void updateThemeForRole(Role role) {
-        Color themeColor;
-        String titleSuffix;
-
-        if (role == Role.PROFESSOR) {
-            themeColor = new Color(255, 182, 193);
-            titleSuffix = " [PROFESSOR]";
-        } else if (role == Role.STUDENT) {
-            themeColor = new Color(144, 238, 144);
-            titleSuffix = " [STUDENT]";
-        } else {
-            themeColor = Theme.STATUS_BAR_BG;
-            titleSuffix = "";
-        }
-
-        toolBarManager.getBtnFollowMe().setVisible(role == Role.PROFESSOR);
-        toolBarManager.getBtnLaser().setVisible(role == Role.PROFESSOR);
-        toolBarManager.getBtnAttendance().setVisible(role == Role.PROFESSOR);
-
-        setTitle("SoCo IDE - " + (collab.getNickname() != null ? collab.getNickname() : "Guest") + titleSuffix);
-        statusPanel.setBackground(themeColor);
-        if (getRootPane() != null)
-            getRootPane().setBorder(BorderFactory.createLineBorder(themeColor, 3));
-        revalidate();
-        repaint();
-    }
-
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
-                UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {
             }
-            Theme.apply();
             new CollabIDE().setVisible(true);
         });
     }
