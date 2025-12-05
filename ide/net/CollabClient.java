@@ -58,17 +58,27 @@ public class CollabClient {
      * @throws IOException 연결 실패 시 발생
      */
     public void connect(String host, int port, String nick, String role) throws IOException {
+        System.out.println("[CLIENT] Connecting to " + host + ":" + port);
+        System.out.println("[CLIENT] Nickname: " + nick + ", Role: " + role);
+
         disconnect();
         socket = new Socket(host, port);
         socket.setTcpNoDelay(true);
         in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
         nickname = nick;
-        sendLine(Protocol.JOIN + Protocol.SEPARATOR + nick + Protocol.SEPARATOR + role);
+
+        // 서버와 연결
         connected = true;
+
+        String joinMsg = Protocol.JOIN + Protocol.SEPARATOR + nick + Protocol.SEPARATOR + role;
+        System.out.println("[CLIENT] Sending JOIN: " + joinMsg);
+        sendLine(joinMsg);
+
         readerThread = new Thread(this::readLoop, "collab-reader");
         readerThread.setDaemon(true);
         readerThread.start();
+        System.out.println("[CLIENT] Connected successfully!");
     }
 
     /**
@@ -128,9 +138,13 @@ public class CollabClient {
                         ui.applyRemoteLaser(p[1], Protocol.safeInt(p[2]), Protocol.safeInt(p[3]));
                     }
                 } else if (msg.startsWith(Protocol.ROLE_INFO + Protocol.SEPARATOR)) {
+                    System.out.println("[CLIENT] Received ROLE_INFO: " + msg);
                     String[] p = msg.split(Protocol.DELIMITER, 3);
                     if (p.length == 3) {
+                        System.out.println("[CLIENT] Parsing ROLE_INFO: nick=" + p[1] + ", role=" + p[2]);
                         ui.onRoleInfo(p[1], p[2]);
+                    } else {
+                        System.out.println("[CLIENT] Invalid ROLE_INFO format: " + msg);
                     }
                 } else if (msg.startsWith(Protocol.FILE_CREATE + Protocol.SEPARATOR) ||
                         msg.startsWith(Protocol.FILE_DELETE + Protocol.SEPARATOR) ||

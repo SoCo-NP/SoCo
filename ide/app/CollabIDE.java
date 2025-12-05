@@ -220,6 +220,22 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
         collab.sendFileRename(oldPath, newPath);
     }
 
+    @Override
+    public java.util.Set<String> getConnectedUsers() {
+        return new java.util.HashSet<>(userRoles.keySet());
+    }
+
+    @Override
+    public java.util.Set<String> getConnectedStudents() {
+        java.util.Set<String> students = new java.util.HashSet<>();
+        for (java.util.Map.Entry<String, ide.domain.Role> entry : userRoles.entrySet()) {
+            if (entry.getValue() == ide.domain.Role.STUDENT) {
+                students.add(entry.getKey());
+            }
+        }
+        return students;
+    }
+
     // --- CollabCallbacks 구현 (Network -> Controller) ---
 
     @Override
@@ -253,6 +269,9 @@ public class CollabIDE extends JFrame implements CollabCallbacks, CollabActions 
         SwingUtilities.invokeLater(() -> {
             Role role = Role.fromString(roleString);
             userRoles.put(nick, role);
+
+            System.out.println("[CollabIDE] ROLE_INFO received: " + nick + " -> " + role);
+            System.out.println("[CollabIDE] Current userRoles: " + userRoles);
 
             if (Objects.equals(nick, collab.getNickname())) {
                 updateThemeForRole(role);

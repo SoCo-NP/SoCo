@@ -108,4 +108,20 @@ public interface CollabActions {
      * @param newPath 변경할 경로
      */
     void sendFileRename(String oldPath, String newPath);
+
+    /**
+     * 현재 접속 중인 사용자들의 닉네임 목록을 반환한다.
+     * 출석 체크 등에 사용된다.
+     *
+     * @return 접속 중인 사용자 닉네임 집합
+     */
+    java.util.Set<String> getConnectedUsers();
+
+    /**
+     * 현재 접속 중인 학생들의 닉네임 목록을 반환한다.
+     * Role이 STUDENT인 사용자만 포함된다.
+     *
+     * @return 접속 중인 학생 닉네임 집합
+     */
+    java.util.Set<String> getConnectedStudents();
 }

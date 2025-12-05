@@ -77,7 +77,10 @@ public class ToolBarManager {
         btnLaser.addActionListener(e -> tabManager.setLaser(btnLaser.isSelected()));
 
         btnAttendance.setVisible(false);
-        // 출석체크 버튼은 별도 다이얼로그 로직과 연결될 수 있음
+        btnAttendance.addActionListener(e -> {
+            AttendanceDialog dialog = new AttendanceDialog((Frame) parentFrame, collab);
+            dialog.setVisible(true);
+        });
 
         toolBar.add(btnOpen);
         toolBar.add(btnSave);

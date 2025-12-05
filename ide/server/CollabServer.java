@@ -9,7 +9,7 @@ import java.util.*;
 import ide.net.Protocol;
 
 /**
- * 협업 IDE의 서버 사이드 로직을 담당하는 메인 클래스.
+ * 교수자 - 학생자 IDE의 서버 사이드 로직을 담당하는 메인 클래스.
  *
  * 다수의 클라이언트 연결을 관리하고, 메시지 브로드캐스팅, 역할 관리,
  * 컴파일 락(Lock) 관리 등의 핵심 기능을 수행한다.
@@ -42,9 +42,11 @@ public class CollabServer {
         try (ServerSocket ss = new ServerSocket(port, 50, InetAddress.getByName("0.0.0.0"))) {
             while (true) {
                 Socket s = ss.accept();
+                System.out.println("[SERVER] Accepted connection from: " + s.getRemoteSocketAddress());
                 Client c = new Client(s);
                 clients.add(c);
                 c.start();
+                System.out.println("[SERVER] Client thread started");
             }
         }
     }
@@ -79,6 +81,7 @@ public class CollabServer {
 
         @Override
         public void run() {
+            System.out.println("[SERVER Client] Thread started for " + socket.getRemoteSocketAddress());
             try (
                     InputStream is = socket.getInputStream();
                     InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
@@ -89,9 +92,12 @@ public class CollabServer {
                 in = br;
                 out = bw;
 
+                System.out.println("[SERVER Client] Waiting for messages...");
                 String line;
                 while ((line = in.readLine()) != null) {
+                    System.out.println("[SERVER Client] Received: " + line);
                     if (line.startsWith(Protocol.JOIN + Protocol.SEPARATOR)) {
+                        System.out.println("[SERVER Client] Detected JOIN message");
                         handleJoin(line);
                     } else if (isBroadcastMessage(line)) {
                         broadcast(line, this);
@@ -101,8 +107,12 @@ public class CollabServer {
                         handleCompileRelease(line);
                     }
                 }
-            } catch (IOException ignored) {
+                System.out.println("[SERVER Client] readLine() returned null, connection closed");
+            } catch (IOException e) {
+                System.out.println("[SERVER Client] IOException: " + e.getMessage());
+                e.printStackTrace();
             } finally {
+                System.out.println("[SERVER Client] Cleanup for " + nick);
                 cleanup();
             }
         }
@@ -123,14 +133,18 @@ public class CollabServer {
                         + socket.getRemoteSocketAddress());
 
                 // 새 접속자의 정보를 모두에게 알림
-                broadcast(Protocol.ROLE_INFO + Protocol.SEPARATOR + nick + Protocol.SEPARATOR + role, null);
+                String newUserRoleInfo = Protocol.ROLE_INFO + Protocol.SEPARATOR + nick + Protocol.SEPARATOR + role;
+                System.out.println("[SERVER] Broadcasting new user ROLE_INFO: " + newUserRoleInfo);
+                broadcast(newUserRoleInfo, null);
 
                 // 기존 접속자들의 정보를 새 접속자에게 전송
                 synchronized (clients) {
                     for (Client c : clients) {
                         if (c != this) {
-                            send(Protocol.ROLE_INFO + Protocol.SEPARATOR + c.nick + Protocol.SEPARATOR
-                                    + c.role);
+                            String existingRoleInfo = Protocol.ROLE_INFO + Protocol.SEPARATOR + c.nick
+                                    + Protocol.SEPARATOR + c.role;
+                            System.out.println("[SERVER] Sending existing user to " + nick + ": " + existingRoleInfo);
+                            send(existingRoleInfo);
                         }
                     }
                 }
