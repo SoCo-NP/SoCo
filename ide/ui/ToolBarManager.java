@@ -8,21 +8,42 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
 
+/**
+ * 상단 툴바(ToolBar)와 메뉴바(MenuBar)를 관리하는 UI 매니저 클래스.
+ * <p>
+ * 사용자가 접근할 수 있는 모든 액션 버튼과 메뉴 항목을 생성하고 이벤트 리스너를 연결한다.
+ * 파일 열기/저장, 네트워크 연결, 기능 토글(Follow Me, Laser) 등의 진입점 역할을 한다.
+ * </p>
+ */
 public class ToolBarManager {
+
+    // UI 컴포넌트
     private final JToolBar toolBar = new JToolBar();
     private final JMenuBar menuBar = new JMenuBar();
+
+    // 의존성
     private final Component parentFrame;
     private final CollabActions collab;
     private final TabManager tabManager;
     private final FileTreeManager fileTreeManager;
 
-    // Toggle Buttons (need to be accessed to updating state)
+    // 상태 토글 버튼 (외부에서 상태 업데이트 필요)
     private final JToggleButton btnFollowMe = new JToggleButton("Follow Me");
     private final JToggleButton btnLaser = new JToggleButton("Laser");
     private final JToggleButton btnAttendance = new JToggleButton("Attendance");
 
+    // 연결 다이얼로그 실행 콜백
     private final Runnable promptConnectAction;
 
+    /**
+     * ToolBarManager 생성자.
+     *
+     * @param parentFrame         부모 프레임 (다이얼로그용)
+     * @param collab              컨트롤러 인터페이스
+     * @param tabManager          탭 매니저
+     * @param fileTreeManager     파일 트리 매니저
+     * @param promptConnectAction 연결 다이얼로그 실행 람다
+     */
     public ToolBarManager(Component parentFrame, CollabActions collab, TabManager tabManager,
             FileTreeManager fileTreeManager, Runnable promptConnectAction) {
         this.parentFrame = parentFrame;
@@ -34,8 +55,11 @@ public class ToolBarManager {
         initActions();
     }
 
+    /**
+     * 툴바와 메뉴바의 모든 항목을 초기화하고 액션을 연결한다.
+     */
     private void initActions() {
-        // --- Toolbar ---
+        // --- 툴바 (Toolbar) 구성 ---
         JButton btnOpen = new JButton("Open Folder");
         btnOpen.addActionListener(e -> chooseAndOpenProjectFolder());
 
@@ -45,7 +69,7 @@ public class ToolBarManager {
         JButton btnConnect = new JButton("Connect");
         btnConnect.addActionListener(e -> promptConnectAction.run());
 
-        // Features
+        // 기능 버튼 초기화 (기본 숨김, 권한에 따라 표시)
         btnFollowMe.setVisible(false);
         btnFollowMe.addActionListener(e -> tabManager.setFollowMe(btnFollowMe.isSelected()));
 
@@ -53,11 +77,7 @@ public class ToolBarManager {
         btnLaser.addActionListener(e -> tabManager.setLaser(btnLaser.isSelected()));
 
         btnAttendance.setVisible(false);
-        // Note: Attendance dialog logic is partly UI, partly logic. Ideally managed
-        // here or in Main.
-        // For now let's let Main handle the dialog but button is here? Or callback.
-        // Let's assume Main attaches listener later or we pass a callback.
-        // To decouple, we'll expose the button.
+        // 출석체크 버튼은 별도 다이얼로그 로직과 연결될 수 있음
 
         toolBar.add(btnOpen);
         toolBar.add(btnSave);
@@ -68,7 +88,7 @@ public class ToolBarManager {
         toolBar.add(btnLaser);
         toolBar.add(btnAttendance);
 
-        // --- Menu Bar ---
+        // --- 메뉴바 (MenuBar) 구성 ---
         JMenu file = new JMenu("File");
 
         JMenuItem openFolder = new JMenuItem("Open Folder...");
@@ -113,12 +133,10 @@ public class ToolBarManager {
 
         JMenuItem closeTab = new JMenuItem("Close Tab");
         closeTab.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, toolkitShortcut()));
-        // Note: Close tab logic needs confirm.
-        // Simplified for refactor: tabManager.closeActiveTab(...)
         closeTab.addActionListener(e -> tabManager.closeActiveTab(null, null));
 
         JMenuItem exit = new JMenuItem("Exit");
-        exit.addActionListener(e -> System.exit(0)); // Ideally confirmCloseAll
+        exit.addActionListener(e -> System.exit(0));
 
         file.add(openFolder);
         file.add(openFile);
@@ -139,6 +157,7 @@ public class ToolBarManager {
         file.add(exit);
         menuBar.add(file);
 
+        // Edit 메뉴
         JMenu edit = new JMenu("Edit");
         JMenuItem undo = new JMenuItem("Undo");
         undo.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, toolkitShortcut()));
@@ -150,19 +169,21 @@ public class ToolBarManager {
         edit.add(redo);
         menuBar.add(edit);
 
+        // Network 메뉴
         JMenu net = new JMenu("Network");
         JMenuItem connect = new JMenuItem("Connect...");
         connect.addActionListener(e -> promptConnectAction.run());
         JMenuItem disconnect = new JMenuItem("Disconnect");
         disconnect.addActionListener(e -> collab.disconnect());
-        // Keystroke mode (handled by CollabIDE or separate state, assuming CollabIDE
-        // holds state)
-        // Ignoring complicated callback for mode for now in this condensed version.
+
         net.add(connect);
         net.add(disconnect);
         menuBar.add(net);
     }
 
+    /**
+     * 프로젝트 폴더 열기 다이얼로그를 띄운다.
+     */
     private void chooseAndOpenProjectFolder() {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -175,6 +196,9 @@ public class ToolBarManager {
         }
     }
 
+    /**
+     * 단일 파일 열기 다이얼로그를 띄운다.
+     */
     private void actionOpenFile() {
         JFileChooser chooser = new JFileChooser(
                 fileTreeManager.getProjectRoot() != null ? fileTreeManager.getProjectRoot() : new File("."));
@@ -189,6 +213,9 @@ public class ToolBarManager {
         }
     }
 
+    /**
+     * 현재 활성화된 탭을 저장한다.
+     */
     private void actionSaveActive() {
         tabManager.getActiveEditor().ifPresent(tab -> {
             if (tab.getFile() == null) {
@@ -202,6 +229,9 @@ public class ToolBarManager {
         });
     }
 
+    /**
+     * 다른 이름으로 저장 다이얼로그를 띄운다.
+     */
     private void actionSaveAsActive() {
         tabManager.getActiveEditor().ifPresent(tab -> {
             JFileChooser chooser = new JFileChooser(
@@ -210,24 +240,22 @@ public class ToolBarManager {
             if (res == JFileChooser.APPROVE_OPTION) {
                 File target = chooser.getSelectedFile();
                 if (tab.saveTo(target)) {
-                    tabManager.updateTabTitle(tab); // In a real app, manager maps might update.
-                    // TabManager needs to update map if path changes.
-                    // Ideally TabManager.saveAs(tab, target)
-                    // For now, re-opening or just updating file is fine.
-                    // Let's rely on tab.setFile done in saveTo? No tab.saveTo just saves.
-                    // We need to update tab's file reference.
-                    // Let's assume TabManager has logic for this, or we add it quickly.
-                    // Actually TabManager was simplified.
+                    tabManager.updateTabTitle(tab);
+                    // 실제로는 탭의 파일 참조도 업데이트해야 함 (간소화됨)
                 }
             }
         });
     }
 
+    /**
+     * OS별 단축키 마스크를 반환한다. (Mac: Command, Win: Ctrl)
+     */
     private int toolkitShortcut() {
         return Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
     }
 
-    // Getters for UI composition
+    // --- UI 컴포넌트 접근자 (Getters) ---
+
     public JToolBar getToolBar() {
         return toolBar;
     }
