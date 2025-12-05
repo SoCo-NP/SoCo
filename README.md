@@ -1,18 +1,19 @@
 # 🚀 Java Socket Programming: SoCo(Socket Coding)
 
-**한성대학교 네트워크 프로그래밍 - 소켓 통신 프로젝트**
-
-**SoCo**는 교수자가 학생들에게 실시간으로 코딩을 가르칠 수 있도록 설계된 **교육용 실시간 코딩 교육 IDE**입니다. 
-이 프로젝트는 **교수(Professor)**와 **학생(Student)**의 역할을 명확히 구분하여 효율적인 원격 교육 환경을 제공하는 것을 목표로 합니다.
+**한성대학교 네트워크 프로그래밍 과목 - 소켓 통신 프로젝트**
+- 프로젝트명: SoCo
+- 프로젝트 주제: 소켓 통신을 활용한 실시간 코딩 교육 IDE
+- 프로젝트 설명: **SoCo**는 교수자가 학생들에게 실시간으로 코딩을 가르칠 수 있도록 설계된 교육용 실시간 코딩 교육 **IDE**입니다. 
+이 프로젝트는 교수(Professor)와 학생(Student)의 역할을 명확히 구분하여 효율적인 원격 교육 환경을 제공하는 것을 목표로 합니다.
 순수 자바 소켓(Java Socket)과 Swing을 사용하여 구현되었으며, 유지보수성과 확장성을 고려해 **계층형 아키텍처**와 **MVC 패턴**을 적용했습니다.
 
 ---
 
 ## 🏗 아키텍처 (Architecture)
 
-이 프로젝트는 유지보수성과 확장성을 위해 **4계층 아키텍처**를 채택했습니다. 특히 **UI와 네트워크 로직의 완전한 분리**에 중점을 두었으며, **단일 책임 원칙(Single Responsibility Principle)**을 준수하도록 리팩터링되었습니다.
+이 프로젝트는 유지보수성과 확장성을 위해 **4계층 아키텍처**를 채택했습니다. 특히 **UI와 네트워크 로직의 완전한 분리**에 중점을 두었으며, 단일 책임 원칙(Single Responsibility Principle)을 준수하도록 리팩터링되었습니다.
 
-### 🏛 전체 구조도
+### 🏛 전체 시스템 구조도
 
 ```mermaid
 graph TD
@@ -49,7 +50,7 @@ graph TD
 - **Follow Me (화면 동기화)** 👀: 교수자의 스크롤 위치에 학생들의 화면 자동 동기화
 - **실시간 커서 위치 공유**: 각 참여자의 커서 위치를 색상으로 표시
 
-### 3. 출석 관리 기능 (Attendance System) ✅
+### 3. 출석 관리 기능 (Attendance System) 
 - **교수자 전용 기능**: 실시간 학생 출석 상태 확인
 - 등록된 학생 명단과 접속 현황 매칭
 - 시각적 상태 표시: 🟢 출석 / 🔴 결석
@@ -143,7 +144,7 @@ graph TD
 SoCo/
 ├── ide/
 │   ├── app/                    # [Application Layer]
-│   │   ├── CollabIDE.java      # 메인 컨트롤러 (리팩터링됨: 318줄)
+│   │   ├── CollabIDE.java      # 메인 컨트롤러 
 │   │   ├── CollabActions.java  # UI → Controller 인터페이스
 │   │   ├── ConnectionManager.java   # 연결 관리 전담
 │   │   ├── UserSessionManager.java  # 사용자 상태 관리
@@ -200,7 +201,7 @@ SoCo/
 
 ---
 
-## � 프로토콜 명세 (Protocol Specification)
+## 프로토콜 명세 (Protocol Specification)
 
 SoCo는 파이프(`|`) 구분자를 사용하는 텍스트 기반 프로토콜을 사용합니다.
 
