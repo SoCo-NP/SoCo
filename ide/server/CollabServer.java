@@ -6,6 +6,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import ide.net.Protocol;
 
 public class CollabServer {
     private final int port;
@@ -13,7 +14,9 @@ public class CollabServer {
     // 파일별 컴파일 락: absolutePath -> holder nickname
     private final Map<String, String> compileLocks = Collections.synchronizedMap(new HashMap<>());
 
-    public CollabServer(int port) { this.port = port; }
+    public CollabServer(int port) {
+        this.port = port;
+    }
 
     public void start() throws IOException {
         System.out.println("[SERVER] Starting on port " + port);
@@ -29,7 +32,9 @@ public class CollabServer {
 
     private void broadcast(String line, Client except) {
         synchronized (clients) {
-            for (Client c : clients) if (c != except) c.send(line);
+            for (Client c : clients)
+                if (c != except)
+                    c.send(line);
         }
     }
 
@@ -40,74 +45,87 @@ public class CollabServer {
         private String nick = "?";
         private String role = "Student";
 
-        Client(Socket socket) { this.socket = socket; }
+        Client(Socket socket) {
+            this.socket = socket;
+        }
 
-        @Override public void run() {
+        @Override
+        public void run() {
             try (
                     InputStream is = socket.getInputStream();
                     InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
                     BufferedReader br = new BufferedReader(isr);
                     OutputStream os = socket.getOutputStream();
                     OutputStreamWriter osw = new OutputStreamWriter(os, StandardCharsets.UTF_8);
-                    BufferedWriter bw = new BufferedWriter(osw)
-            ) {
-                in = br; out = bw;
+                    BufferedWriter bw = new BufferedWriter(osw)) {
+                in = br;
+                out = bw;
+                in = br;
+                out = bw;
                 String line;
                 while ((line = in.readLine()) != null) {
-                    if (line.startsWith("JOIN|")) {
-                        String[] parts = line.split("\\|", 3);
+                    if (line.startsWith(Protocol.JOIN + Protocol.SEPARATOR)) {
+                        String[] parts = line.split(Protocol.DELIMITER, 3);
                         if (parts.length >= 2) {
                             nick = parts[1];
                             if (parts.length == 3) {
                                 role = parts[2];
                             }
-                            send("INFO|Welcome " + nick);
-                            System.out.println("[SERVER] Client connected: " + nick + " (" + role + ") from " + socket.getRemoteSocketAddress());
+                            send(Protocol.INFO + Protocol.SEPARATOR + "Welcome " + nick);
+                            System.out.println("[SERVER] Client connected: " + nick + " (" + role + ") from "
+                                    + socket.getRemoteSocketAddress());
 
                             // Announce the new user's role to everyone
-                            broadcast("ROLE_INFO|" + nick + "|" + role, null);
+                            broadcast(Protocol.ROLE_INFO + Protocol.SEPARATOR + nick + Protocol.SEPARATOR + role, null);
 
                             // Send existing user roles to the new user
                             synchronized (clients) {
                                 for (Client c : clients) {
                                     if (c != this) {
-                                        send("ROLE_INFO|" + c.nick + "|" + c.role);
+                                        send(Protocol.ROLE_INFO + Protocol.SEPARATOR + c.nick + Protocol.SEPARATOR
+                                                + c.role);
                                     }
                                 }
                             }
                         }
-                    } else if (line.startsWith("EDIT|")
-                            || line.startsWith("CURSOR|")
-                            || line.startsWith("COMPILE_START|")
-                            || line.startsWith("COMPILE_OUT|")
-                            || line.startsWith("COMPILE_END|")
-                            || line.startsWith("FILE_CREATE|")
-                            || line.startsWith("FILE_DELETE|")
-                            || line.startsWith("FILE_RENAME|")
-                            || line.startsWith("VIEWPORT|")
-                            || line.startsWith("LASER|")) {
+                    } else if (line.startsWith(Protocol.EDIT + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.CURSOR + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.COMPILE_START + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.COMPILE_OUT + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.COMPILE_END + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.FILE_CREATE + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.FILE_DELETE + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.FILE_RENAME + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.VIEWPORT + Protocol.SEPARATOR)
+                            || line.startsWith(Protocol.LASER + Protocol.SEPARATOR)) {
                         broadcast(line, this);
-                    } else if (line.startsWith("COMPILE_REQ|")) {
-                        String[] p = line.split("\\|", 3);
+                    } else if (line.startsWith(Protocol.COMPILE_REQ + Protocol.SEPARATOR)) {
+                        String[] p = line.split(Protocol.DELIMITER, 3);
                         if (p.length == 3) {
-                            String fpath = p[1]; String reqNick = p[2];
+                            String fpath = p[1];
+                            String reqNick = p[2];
                             String holder = compileLocks.get(fpath);
                             if (holder == null) {
                                 compileLocks.put(fpath, reqNick);
-                                send("COMPILE_GRANTED|" + fpath + "|" + reqNick);
-                                broadcast("COMPILE_GRANTED|" + fpath + "|" + reqNick, this);
+                                send(Protocol.COMPILE_GRANTED + Protocol.SEPARATOR + fpath + Protocol.SEPARATOR
+                                        + reqNick);
+                                broadcast(Protocol.COMPILE_GRANTED + Protocol.SEPARATOR + fpath + Protocol.SEPARATOR
+                                        + reqNick, this);
                             } else {
-                                send("COMPILE_DENIED|" + fpath + "|" + holder);
+                                send(Protocol.COMPILE_DENIED + Protocol.SEPARATOR + fpath + Protocol.SEPARATOR
+                                        + holder);
                             }
                         }
-                    } else if (line.startsWith("COMPILE_RELEASE|")) {
-                        String[] p = line.split("\\|", 3);
+                    } else if (line.startsWith(Protocol.COMPILE_RELEASE + Protocol.SEPARATOR)) {
+                        String[] p = line.split(Protocol.DELIMITER, 3);
                         if (p.length == 3) {
-                            String fpath = p[1]; String reqNick = p[2];
+                            String fpath = p[1];
+                            String reqNick = p[2];
                             String holder = compileLocks.get(fpath);
                             if (holder != null && holder.equals(reqNick)) {
                                 compileLocks.remove(fpath);
-                                broadcast("COMPILE_RELEASE|" + fpath + "|" + reqNick, this);
+                                broadcast(Protocol.COMPILE_RELEASE + Protocol.SEPARATOR + fpath + Protocol.SEPARATOR
+                                        + reqNick, this);
                             }
                         }
                     }
@@ -117,21 +135,33 @@ public class CollabServer {
                 // disconnect → 이 닉이 가진 락 해제
                 List<String> toRelease = new ArrayList<>();
                 synchronized (compileLocks) {
-                    for (Map.Entry<String,String> e : compileLocks.entrySet()) {
-                        if (Objects.equals(e.getValue(), nick)) toRelease.add(e.getKey());
+                    for (Map.Entry<String, String> e : compileLocks.entrySet()) {
+                        if (Objects.equals(e.getValue(), nick))
+                            toRelease.add(e.getKey());
                     }
-                    for (String f : toRelease) compileLocks.remove(f);
+                    for (String f : toRelease)
+                        compileLocks.remove(f);
                 }
-                for (String f : toRelease) broadcast("COMPILE_RELEASE|" + f + "|" + nick, this);
+                for (String f : toRelease)
+                    broadcast(Protocol.COMPILE_RELEASE + Protocol.SEPARATOR + f + Protocol.SEPARATOR + nick, this);
 
                 clients.remove(this);
-                System.out.println("[SERVER] Client disconnected: " + nick + " from " + socket.getRemoteSocketAddress());
-                try { socket.close(); } catch (IOException ignored2) {}
+                System.out
+                        .println("[SERVER] Client disconnected: " + nick + " from " + socket.getRemoteSocketAddress());
+                try {
+                    socket.close();
+                } catch (IOException ignored2) {
+                }
             }
         }
 
         void send(String s) {
-            try { out.write(s); out.write('\n'); out.flush(); } catch (IOException ignored) {}
+            try {
+                out.write(s);
+                out.write('\n');
+                out.flush();
+            } catch (IOException ignored) {
+            }
         }
     }
 
