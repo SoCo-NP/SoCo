@@ -16,10 +16,10 @@ import java.util.Optional;
 
 /**
  * 프로젝트 파일 탐색기(File Explorer)를 관리하는 UI 매니저 클래스.
- * <p>
+ *
  * 좌측의 파일 트리 뷰를 담당하며, 파일 열기, 생성, 삭제, 이름 변경 등의 기능을 제공한다.
  * 사용자 액션 발생 시 컨트롤러(CollabActions)를 통해 서버로 변경 사항을 전파한다.
- * </p>
+ *
  */
 public class FileTreeManager {
 

@@ -6,10 +6,10 @@ import javax.swing.plaf.ColorUIResource;
 
 /**
  * IDE의 UI 테마 색상을 정의하는 클래스.
- * <p>
+ *
  * 에디터 배경, 글자색, 선택 영역, 줄 번호 등 주요 UI 요소의 색상 상수를 관리한다.
  * 현재는 다크 모드 스타일의 색상 팔레트를 제공한다.
- * </p>
+ *
  */
 public class Theme {
 

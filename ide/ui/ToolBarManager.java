@@ -10,10 +10,10 @@ import java.io.File;
 
 /**
  * 상단 툴바(ToolBar)와 메뉴바(MenuBar)를 관리하는 UI 매니저 클래스.
- * <p>
+ *
  * 사용자가 접근할 수 있는 모든 액션 버튼과 메뉴 항목을 생성하고 이벤트 리스너를 연결한다.
  * 파일 열기/저장, 네트워크 연결, 기능 토글(Follow Me, Laser) 등의 진입점 역할을 한다.
- * </p>
+ *
  */
 public class ToolBarManager {
 

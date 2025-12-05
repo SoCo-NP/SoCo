@@ -24,10 +24,10 @@ import java.util.function.Consumer;
 
 /**
  * 개별 소스 코드를 편집하는 에디터 컴포넌트 클래스.
- * <p>
+ *
  * JTextArea를 확장하여 텍스트 편집, 실행 취소(Undo/Redo), 구문 강조(테마 적용) 기능을 제공한다.
  * 사용자의 키 입력을 감지하여 컨트롤러에게 전송하고, 원격 사용자의 커서 및 레이저를 화면에 그린다.
- * </p>
+ *
  */
 public class EditorTab extends JTextArea {
 

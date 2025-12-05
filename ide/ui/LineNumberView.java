@@ -10,10 +10,10 @@ import java.awt.*;
 
 /**
  * 에디터 좌측에 줄 번호를 표시하는 컴포넌트 클래스.
- * <p>
+ *
  * JTextArea와 연동되어 텍스트의 줄 수에 맞춰 자동으로 번호를 렌더링한다.
  * 텍스트 변경이나 커서 이동 시 화면을 갱신하여 항상 최신 줄 번호를 유지한다.
- * </p>
+ *
  */
 public class LineNumberView extends JComponent implements DocumentListener, CaretListener {
     private static final int MARGIN = 8;
