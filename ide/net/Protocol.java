@@ -1,46 +1,64 @@
 package ide.net;
 
 /**
- * Defines all network message constants and helper methods for the socket
- * protocol.
- * Using constants prevents typos and makes the code more readable.
+ * 소켓 통신 프로토콜에 사용되는 메시지 상수와 헬퍼 메소드를 정의하는 클래스.
+ *
+ * 클라이언트와 서버 간의 통신 규약을 상수로 관리하여 오타를 방지하고 가독성을 높인다.
+ * 각 메시지는 파이프('|') 문자로 구분된 문자열 형태를 가진다.
  */
 public class Protocol {
-    // Delimiter used in messages
+    // 메시지 구분자
     public static final String DELIMITER = "\\|";
     public static final String SEPARATOR = "|";
 
-    // --- Message Types ---
+    // --- 메시지 타입 (Message Types) ---
 
-    // Connection & Auth
-    public static final String JOIN = "JOIN"; // Client -> Server: JOIN|Nickname|Role
-    public static final String INFO = "INFO"; // Server -> Client: INFO|Message
-    public static final String ROLE_INFO = "ROLE_INFO"; // Server <-> Client: ROLE_INFO|Nickname|Role
+    // 연결 및 인증 (Connection & Auth)
+    /** 클라이언트 -> 서버: 입장 요청 (JOIN|Nickname|Role) */
+    public static final String JOIN = "JOIN";
+    /** 서버 -> 클라이언트: 시스템 메시지 (INFO|Message) */
+    public static final String INFO = "INFO";
+    /** 서버 <-> 클라이언트: 역할 정보 교환 (ROLE_INFO|Nickname|Role) */
+    public static final String ROLE_INFO = "ROLE_INFO";
 
-    // Editor Actions
-    public static final String EDIT = "EDIT"; // Bidirectional: EDIT|Path|Base64Content
-    public static final String CURSOR = "CURSOR"; // Bidirectional: CURSOR|Path|Nickname|Dot|Mark
-    public static final String VIEWPORT = "VIEWPORT"; // Bidirectional: VIEWPORT|Path|LineNumber
-    public static final String LASER = "LASER"; // Bidirectional: LASER|Path|X|Y
+    // 에디터 액션 (Editor Actions)
+    /** 양방향: 텍스트 편집 (EDIT|Path|Base64Content) */
+    public static final String EDIT = "EDIT";
+    /** 양방향: 커서 이동 (CURSOR|Path|Nickname|Dot|Mark) */
+    public static final String CURSOR = "CURSOR";
+    /** 양방향: 뷰포트 스크롤 (VIEWPORT|Path|LineNumber) */
+    public static final String VIEWPORT = "VIEWPORT";
+    /** 양방향: 레이저 포인터 (LASER|Path|X|Y) */
+    public static final String LASER = "LASER";
 
-    // File System Actions (Broadcast only)
-    public static final String FILE_CREATE = "FILE_CREATE"; // FILE_CREATE|Path|IsDir|Nickname
-    public static final String FILE_DELETE = "FILE_DELETE"; // FILE_DELETE|Path|Nickname
-    public static final String FILE_RENAME = "FILE_RENAME"; // FILE_RENAME|OldPath|NewPath|Nickname
+    // 파일 시스템 액션 (브로드캐스트 전용)
+    /** 파일 생성 알림 (FILE_CREATE|Path|IsDir|Nickname) */
+    public static final String FILE_CREATE = "FILE_CREATE";
+    /** 파일 삭제 알림 (FILE_DELETE|Path|Nickname) */
+    public static final String FILE_DELETE = "FILE_DELETE";
+    /** 파일 이름 변경 알림 (FILE_RENAME|OldPath|NewPath|Nickname) */
+    public static final String FILE_RENAME = "FILE_RENAME";
 
-    // Compilation (Locking mechanism)
-    public static final String COMPILE_REQ = "COMPILE_REQ"; // Client -> Server
-    public static final String COMPILE_GRANTED = "COMPILE_GRANTED"; // Server -> Client
-    public static final String COMPILE_DENIED = "COMPILE_DENIED"; // Server -> Client
-    public static final String COMPILE_RELEASE = "COMPILE_RELEASE"; // Client -> Server
+    // 컴파일 및 실행 제어 (Locking mechanism)
+    /** 클라이언트 -> 서버: 컴파일 권한 요청 */
+    public static final String COMPILE_REQ = "COMPILE_REQ";
+    /** 서버 -> 클라이언트: 컴파일 권한 승인 */
+    public static final String COMPILE_GRANTED = "COMPILE_GRANTED";
+    /** 서버 -> 클라이언트: 컴파일 권한 거부 (다른 사용자가 사용 중) */
+    public static final String COMPILE_DENIED = "COMPILE_DENIED";
+    /** 클라이언트 -> 서버: 컴파일 권한 반납 */
+    public static final String COMPILE_RELEASE = "COMPILE_RELEASE";
 
-    // Compilation Output Streaming
+    // 컴파일 출력 스트리밍 (Compilation Output Streaming)
     public static final String COMPILE_START = "COMPILE_START";
     public static final String COMPILE_OUT = "COMPILE_OUT";
     public static final String COMPILE_END = "COMPILE_END";
 
     /**
-     * Helper to split a message line safely.
+     * 수신된 메시지 라인을 구분자로 분리한다.
+     *
+     * @param line 수신된 원본 메시지 문자열
+     * @return 분리된 문자열 배열
      */
     public static String[] parse(String line) {
         if (line == null)
@@ -49,7 +67,11 @@ public class Protocol {
     }
 
     /**
-     * Helper to parse integer safely.
+     * 문자열을 정수로 안전하게 변환한다.
+     * 변환 실패 시 0을 반환한다.
+     *
+     * @param s 변환할 문자열
+     * @return 변환된 정수 값 또는 0
      */
     public static int safeInt(String s) {
         try {
