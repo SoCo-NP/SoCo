@@ -11,7 +11,7 @@
 
 ## 🏗 아키텍처 (Architecture)
 
-이 프로젝트는 유지보수성과 확장성을 위해 **4계층 아키텍처**를 채택했습니다. 특히 **UI와 네트워크 로직의 완전한 분리**에 중점을 두었으며, 단일 책임 원칙(Single Responsibility Principle)을 준수하도록 리팩터링되었습니다.
+이 프로젝트는 유지보수성과 확장성을 위해 **4계층 아키텍처**를 채택했습니다. 특히 **UI와 네트워크 로직의 완전한 분리**에 중점을 두었으며, 단일 책임 원칙(Single Responsibility Principle)을 준수하도록 설계되었습니다.
 
 ### 🏛 전체 시스템 구조도
 
@@ -77,8 +77,67 @@ graph TD
 - 파일/폴더 생성, 삭제, 이름 변경
 - 여러 파일을 탭으로 동시 편집
 - 자동 저장 및 수정 상태 표시
+---
+## 프로젝트 UI
+
+### 교수자 화면
+
+#### 1) IDE 메인 화면 · 출석부
+
+<table>
+  <tr>
+    <td align="center">
+      <b>교수자 IDE 메인 화면</b><br/>
+      <img src="https://github.com/user-attachments/assets/132eefb3-b554-461b-a0c0-29236de09491" width="480" />
+    </td>
+    <td align="center">
+      <b>실시간 출석부 UI</b><br/>
+      <img src="https://github.com/user-attachments/assets/c338845c-7c41-40ce-8f68-872dc2f2687b" width="480" />
+    </td>
+  </tr>
+</table>
+
+#### 2) 하이라이터 · 레이저 포인터
+
+<table>
+  <tr>
+    <td align="center">
+      <b>멀티 유저 하이라이터</b><br/>
+      <img src="https://github.com/user-attachments/assets/49e52d70-ff10-45cc-92c0-074d5cf64722" width="480" />
+    </td>
+    <td align="center">
+      <b>레이저 포인터 강조 화면</b><br/>
+      <img src="https://github.com/user-attachments/assets/99d100ce-5aad-426c-acfa-6282162c71a6" width="420" />
+    </td>
+  </tr>
+</table>
 
 ---
+
+### 학생 화면
+
+#### 1) 학생 IDE 메인 화면
+
+<p align="center">
+  <b>학생용 IDE UI</b><br/>
+  <img src="https://github.com/user-attachments/assets/dd824951-f71f-4269-948b-b39734ba6326" width="700" />
+</p>
+
+#### 2) 질문 전송 · 질문 목록 UI
+
+<table>
+  <tr>
+    <td align="center">
+      <b>학생 질문 작성 화면</b><br/>
+      <img src="https://github.com/user-attachments/assets/49013654-8c33-4535-a4f9-173827786661" width="480" />
+    </td>
+    <td align="center">
+      <b>교수자용 질문 목록 UI</b><br/>
+      <img src="https://github.com/user-attachments/assets/0aba0e11-a9f8-4678-989f-b336c884f87f" width="480" />
+    </td>
+  </tr>
+</table>
+
 
 ## 🛠 기술 스택 (Tech Stack)
 
@@ -92,7 +151,6 @@ graph TD
   - Dependency Injection (Manager classes)
 
 ---
-
 ## 🚀 실행 방법 (Getting Started)
 
 프로젝트 루트에서 제공된 쉘 스크립트를 사용하여 간편하게 실행할 수 있습니다.
