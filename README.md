@@ -120,7 +120,7 @@ graph TD
 
 <p align="center">
   <b>학생용 IDE UI</b><br/>
-  <img src="https://github.com/user-attachments/assets/dd824951-f71f-4269-948b-b39734ba6326" width="700" />
+  <img src="https://github.com/user-attachments/assets/dd824951-f71f-4269-948b-b39734ba6326" width="600" />
 </p>
 
 #### 2) 질문 전송 · 질문 목록 UI
@@ -128,11 +128,11 @@ graph TD
 <table>
   <tr>
     <td align="center">
-      <b>학생 질문 작성 화면</b><br/>
+      <b>교수자용 질문 목록 UI</b><br/>
       <img src="https://github.com/user-attachments/assets/49013654-8c33-4535-a4f9-173827786661" width="480" />
     </td>
     <td align="center">
-      <b>교수자용 질문 목록 UI</b><br/>
+      <b>학생 질문 작성 UI</b><br/>
       <img src="https://github.com/user-attachments/assets/0aba0e11-a9f8-4678-989f-b336c884f87f" width="480" />
     </td>
   </tr>
